@@ -1,0 +1,822 @@
+Spring - MVC
+************
+
+El objeto de modelo (Model)
+===========================
+
+Un modelo es una clase de Java clásica que tiene atributos y métodos getters y setters. Se le suele conocer como POJO.
+Ej:
+
+package com.demoweb.app.model;
+
+public class Usuario {
+	private String nombre;
+	private String apellido;
+	public String getNombre() {
+		return nombre;
+	}
+	public void setNombre(String nombre) {
+		this.nombre = nombre;
+	}
+	public String getApellido() {
+		return apellido;
+	}
+	public void setApellido(String apellido) {
+		this.apellido = apellido;
+	}
+	
+	
+
+}
+
+Se puede aprovechar el modelo en una vista tal como:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<title th:text="${titulo}"></title>
+</head>
+<body>
+<h1 th:text="${titulo}"></h1>
+<span th:text="${usuario.nombre}"></span>
+<span th:text="${usuario.apellido}"></span>
+</body>
+</html>
+
+
+
+Thymeleaf
+=========
+
+Vista controlada con "if"
+-------------------------
+
+En el controlador:
+
+	@RequestMapping("/perfil")
+	public String perfil(Model model) {
+		Usuario usuario = new Usuario();
+		
+		usuario.setNombre("Tino");
+		usuario.setApellido("Reyna");
+		usuario.setEmail("tino@mail.com");
+		
+		model.addAttribute("usuario", usuario);
+		model.addAttribute("titulo", "Perfil del usuario: ".concat(usuario.getNombre()));
+		return "perfil";
+	}
+
+En la vista (perfil.html):
+
+
+<span th:if="${usuario.email}" th:text="${usuario.email}"></span>
+<span th:if="${usuario.email == null}">El usuario no tiene correo</span>
+
+
+Mostrar arreglo de objetos en la vista
+--------------------------------------
+
+En el controlador:
+
+	@RequestMapping("/listar")
+	public String listar(Model model) {
+		
+		// dos formas de manejo de listas
+		// forma 1:
+		/*
+		 * List<Usuario> usuarios = new ArrayList<>(); usuarios.add(new Usuario("Tino",
+		 * "Reyna", "tino@mail.com")); usuarios.add(new Usuario("Gabriela", "Lorentzen",
+		 * "gaby@mail.com")); usuarios.add(new Usuario("Dante", "Lorentzen",
+		 * "dante.com"));
+		 */
+		// forma 2:		
+		List<Usuario> usuarios = Arrays.asList(
+			new Usuario("Tino", "Reyna", "tino@mail.com"),
+			new Usuario("Gabriela", "Lorentzen", "gaby@mail.com"),
+			new Usuario("Dante", "Lorentzen", "dante.com")
+		);
+		
+		model.addAttribute("titulo", "Listado de usuarios");
+		model.addAttribute("usuarios", usuarios);
+		
+		return "listar";
+	}
+
+En la vista (listar.html):
+
+	<div th:if="${usuarios.isEmpty()}">
+		No hay usuarios
+	</div>
+	<table th:if="${not usuarios.isEmpty()}">
+		<thead>
+			<th>Nombre</th>
+			<th>Apellido</th>
+			<th>Email</th>
+		</thead>
+		<tbody>
+			<tr th:each="usuario: ${usuarios}">
+				<td th:text="${usuario.nombre}"></td>
+				<td th:text="${usuario.apellido}"></td>
+				<td th:text="${usuario.email}"></td>
+			</tr>
+		</tbody>
+	</table>
+
+Se puede usar, alternativamente a usuarios.isEmpty() y not usuarios.isEmpty(), usuarios.size() == 0 y usuarios.size() > 0, respectivamente.
+En el segundo caso también vale la expresión !usuarios.isEmpty()
+
+
+Anotación ModelAttribute
+========================
+
+Controlador:
+
+	@ModelAttribute("usuarios")
+	public List<Usuario> poblarUsuarios(){
+		List<Usuario> usuarios = Arrays.asList(
+				new Usuario("Tino", "Reyna", "tino@mail.com"),
+				new Usuario("Gabriela", "Lorentzen", "gaby@mail.com"),
+				new Usuario("Dante", "Lorentzen", "dante.com")
+			);
+		return usuarios;
+	}
+
+Vista:
+
+<body>
+	<h1 th:text="${titulo}"></h1>
+	
+	<table th:if="${!usuarios.isEmpty()}">
+		<thead>
+			<th>Nombre</th>
+			<th>Apellido</th>
+			<th>Email</th>
+		</thead>
+		<tbody>
+			<tr th:each="usuario: ${usuarios}">
+				<td th:text="${usuario.nombre}"></td>
+				<td th:text="${usuario.apellido}"></td>
+				<td th:text="${usuario.email}"></td>
+			</tr>
+		</tbody>
+	</table>
+</body>
+
+Permite una muestra dinámica de objetos de una lista por medio de un único atributo.
+
+
+
+Anotación RequestParam
+======================
+
+Permite el paso de parámetros en solicitudes tipo GET.
+
+Controlador:
+
+package com.demoweb.app.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+@Controller // controlador
+@RequestMapping("/params") // GET - endpoint: /params
+public class EjemploParamsController {
+	
+	// En @RequestParam los argumentos son:
+	// nombre del parámetro, si es requerido y valor por defecto
+	// La prueba es desde: http://localhost:8080/params/string?texto=Hola%20que%20tal
+	// Si no se pasa parámetros, por defecto arroja: "Sin parámetros..."
+	@GetMapping("/string")
+	public String param (@RequestParam(name="texto", required=false, defaultValue="Sin parámetros...") String texto , Model model) {
+		model.addAttribute("resultado", "Texto recibido: " + texto);
+		return "/params/ver";
+	}
+}
+
+Vista:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title>Paso de parámetros</title>
+</head>
+<body>
+<div th:text="${resultado}"></div>
+</body>
+</html>
+
+
+Con enlaces
+-----------
+
+Controlador:
+
+	// probar desde: http://localhost:8080/params/
+	@GetMapping("/")
+	public String index() {
+		return "/params/index";
+	}
+
+
+Vista: (archivo params/index.html)
+
+<body>
+
+<ul>
+	<li>
+		<a th:href="@{/params/string(texto='Hola Tino')}">/params/string?texto=texto=Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/params/string(texto='Todo bien?')}">/params/string?texto=texto=Todo bien?</a>
+	</li>
+</ul>
+</body>
+
+
+Envío de varios parámetros
+--------------------------
+
+Controlador:
+
+	// Probar con varios parámetros
+	@GetMapping("/mix-params")
+	public String param(@RequestParam(name="saludo", required=false, defaultValue="Hola hola...") String saludo,
+						@RequestParam Integer numero,
+						Model model) {
+		model.addAttribute("resultado", "Saludo: " + saludo + ", con número " + numero);
+		return "params/ver";
+	}
+	
+Vista: (archivo params/index.html)
+
+<ul>
+	<li>
+		<a th:href="@{/params/string(texto='Hola Tino')}">/params/string?texto=texto=Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/params/string(texto='Todo bien?')}">/params/string?texto=texto=Todo bien?</a>
+	</li>
+	<li>
+		<a th:href="@{/params/mix-params(saludo='Hola, Tino, qué tal?', numero=10)}">/params/string?saludo=Hola, Tino, qué tal?</a>
+	</li>
+</ul>
+
+
+HttpServletRequest
+------------------
+
+Controlador:
+
+	// HttpServletRequest
+	@GetMapping("/mix-params-request")
+	public String param(HttpServletRequest request, Model model) {
+		String saludo = request.getParameter("saludo");
+		Integer numero = null;
+		
+		try {
+			numero = Integer.parseInt(request.getParameter("numero"));
+		} catch (NumberFormatException e) {
+			System.err.println("Error: " + e.getMessage());
+			numero = 0;
+		}
+		
+		model.addAttribute("resultado", "Saludo: " + saludo + ", con número " + numero);
+		return "params/ver";
+	}
+
+Vista: (archivo params/index.html)
+
+
+<ul>
+	<li>
+		<a th:href="@{/params/string(texto='Hola Tino')}">/params/string?texto=texto=Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/params/string(texto='Todo bien?')}">/params/string?texto=texto=Todo bien?</a>
+	</li>
+	<li>
+		<a th:href="@{/params/mix-params(saludo='Hola, Tino, qué tal?', numero=10)}">/params/string?saludo=Hola, Tino, qué tal?</a>
+	</li>
+	<li>
+		<a th:href="@{/params/mix-params-request(saludo='Hola, Tino, qué tal?', numero=10)}">/params/string?saludo=Hola, Tino, qué tal?</a>
+	</li>
+</ul>
+
+
+Anotación PathVariable
+======================
+
+
+Controlador:
+
+package com.demoweb.app.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+@Controller
+@RequestMapping("/variables")
+public class EjemploVariablesRutaController {
+	
+	@GetMapping("/string/{texto}")
+	public String variables(@PathVariable String texto, Model model) {
+		model.addAttribute("titulo", "Recibir parámetros de la ruta (@PathVariable)");
+		model.addAttribute("resultado", "Texto: " + texto);
+		return "variables/ver";
+	}
+}
+
+Vista:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title th:text="${titulo}">Recepción de parámetros</title>
+</head>
+<body>
+<div th:text="${resultado}"></div>
+</body>
+</html>
+
+Prueba: http://localhost:8080/variables/string/hola
+
+
+Varias variables
+----------------
+
+Controlador:
+
+	@GetMapping("/string/{texto}/{numero}")
+	public String variables(@PathVariable String texto, @PathVariable Integer numero, Model model) {
+		model.addAttribute("titulo", "Enviar parámetros de la ruta (@PathVariable)");
+		model.addAttribute("resultado", "Texto: " + texto + ", numero: " + numero);
+		return "variables/ver";
+	}
+
+Vista:
+
+<body>
+<ul>
+	<li>
+		<a th:href="@{/variables/string/} + 'Hola Tino'">/variables/string/Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/variables/string/} + 'Hola Tino' + '/' + 10">/variables/string/Hola Tino/10</a>
+	</li>
+</ul>
+</body>
+
+Prueba: http://localhost:8080/variables/string/Hola%20Tino/10
+
+
+Recursos estáticos
+==================
+
+Los recursos estáticos van dentro de src/main/resources/static.
+
+h1.color-rojo{
+	color: red;
+}
+
+h2.color-azul{
+	color: blue;
+}
+
+En la carpeta static también se puede alojar archivos de imagen.
+
+En la vista se tendría:
+
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title>Prueba</title>
+<link rel="stylesheet" type="text/css" th:href="@{/css/style.css}" />
+</head>
+<body>
+	<h1 th:text="${titulo}"></h1>
+	<h1 class="color-rojo">Título de prueba</h1>
+	
+	<table th:if="${!usuarios.isEmpty()}">
+		<thead>
+			<th>Nombre</th>
+			<th>Apellido</th>
+			<th>Email</th>
+		</thead>
+	</table>
+	
+	<img th:src="@{/images/music.png}" />
+</body>
+</html>
+
+
+Anotación Value
+===============
+
+Se aplica a atributos del controlador para tomar valores definidos como parámetros de configuración en application.properties.
+
+application.properties:
+
+texto.indexcontroller.index.titulo: Hola Spring
+texto.indexcontroller.perfil.titulo: Perfil del usuario: 
+texto.indexcontroller.listar.titulo: Listado de usuarios
+
+
+Controlador:
+
+public class IndexController {
+	
+	@Value("${texto.indexcontroller.index.titulo}")
+	private String textoIndex;
+	@Value("${texto.indexcontroller.perfil.titulo}")
+	private String textoPerfil;
+	@Value("${texto.indexcontroller.listar.titulo}")
+	private String textoListar;
+
+	// anotación GetMapping: indica que el método es del tipo GET
+	// existen anotaciones también para POST, PUT, DELETE, etc.
+	@GetMapping({"/index", "/home", "/", ""}) // puede ser solo "index" o un arreglo de endpoints para determinar el home
+	public String index(Model model) {
+		model.addAttribute("titulo", textoIndex);
+		return "index";
+	}
+	
+	@RequestMapping("/perfil")
+	public String perfil(Model model) {
+		Usuario usuario = new Usuario();
+		
+		usuario.setNombre("Tino");
+		usuario.setApellido("Reyna");
+		usuario.setEmail("tino@mail.com");
+		
+		model.addAttribute("usuario", usuario);
+		model.addAttribute("titulo", textoPerfil.concat(usuario.getNombre()));
+		return "perfil";
+	}
+	
+	@RequestMapping("/listar")
+	public String listar(Model model) {
+		
+		// dos formas de manejo de listas
+		// forma 1:
+		/*
+		 * List<Usuario> usuarios = new ArrayList<>(); usuarios.add(new Usuario("Tino",
+		 * "Reyna", "tino@mail.com")); usuarios.add(new Usuario("Gabriela", "Lorentzen",
+		 * "gaby@mail.com")); usuarios.add(new Usuario("Dante", "Lorentzen",
+		 * "dante.com"));
+		 */
+		// forma 2:		
+		/*
+		 * List<Usuario> usuarios = Arrays.asList( new Usuario("Tino", "Reyna",
+		 * "tino@mail.com"), new Usuario("Gabriela", "Lorentzen", "gaby@mail.com"), new
+		 * Usuario("Dante", "Lorentzen", "dante.com") ); model.addAttribute("usuarios",
+		 * usuarios);
+		 */
+		
+		model.addAttribute("titulo", textoListar);
+		
+		return "listar";
+	}
+	
+	@ModelAttribute("usuarios")
+	public List<Usuario> poblarUsuarios(){
+		List<Usuario> usuarios = Arrays.asList(
+				new Usuario("Tino", "Reyna", "tino@mail.com"),
+				new Usuario("Gabriela", "Lorentzen", "gaby@mail.com"),
+				new Usuario("Dante", "Lorentzen", "dante.com")
+			);
+		return usuarios;
+	}
+	
+}
+
+Vista: es la misma que al inicio del proyecto, no cambia.
+
+
+Manejo de propiedades con archivos diferentes a application.properties
+======================================================================
+
+Al nivel de application.properties, crear un archivo nuevo de configuración. Por ejemplo, textos.properties
+
+textos.properties:
+
+texto.indexcontroller.index.titulo: Hola Spring
+texto.indexcontroller.perfil.titulo: Perfil del usuario: 
+texto.indexcontroller.listar.titulo: Listado de usuarios
+
+Luego, crear una clase en el paquete principal (donde está el main):
+
+package com.demoweb.app;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.context.annotation.PropertySources;
+
+@Configuration
+@PropertySources({
+	@PropertySource("classpath:textos.properties")
+})
+public class TextosPropertiesConfig {
+
+}
+
+Se verifica que la configuración de los textos en IndexController no se ve afectada.
+
+
+Redirección de rutas
+====================
+
+Se emplean directivas redirect y forward en el retorno del método del controlador:
+
+package com.demoweb.app.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class HomeController {
+
+	@GetMapping("/")
+	public String home() {
+		//return "redirect:https://www.google.com"; // redirige al sitio de Google (recarga el sitio)
+		return "forward:/app/index"; // funciona solo para rutas del app
+	}
+}
+
+
+Deploy del proyecto
+===================
+
+1. Asegurarse de que se haya definido la variable de entorno JAVA_HOME.
+2. En la raíz del proyecto, ingresar el comando en consola: .\mvnw.cmd package
+El resultado debería ser:
+
+PS E:\Java\Spring\DemoWeb> .\mvnw.cmd package
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ------------------------< com.demoweb:DemoWeb >-------------------------
+[INFO] Building DemoWeb 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- resources:3.3.1:resources (default-resources) @ DemoWeb ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 11 resources from src\main\resources to target\classes
+[INFO]
+[INFO] --- compiler:3.11.0:compile (default-compile) @ DemoWeb ---
+[INFO] Changes detected - recompiling the module! :input tree
+[INFO] Compiling 7 source files with javac [debug release 17] to target\classes
+[INFO]
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ DemoWeb ---
+[INFO] skip non existing resourceDirectory E:\Java\Spring\DemoWeb\src\test\resources
+[INFO]
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ DemoWeb ---
+[INFO] Changes detected - recompiling the module! :dependency
+[INFO] Compiling 1 source file with javac [debug release 17] to target\test-classes
+[INFO]
+[INFO] --- surefire:3.0.0:test (default-test) @ DemoWeb ---
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/maven-surefire-common/3.0.0/maven-surefire-common-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/maven-surefire-common/3.0.0/maven-surefire-common-3.0.0.pom (5.9 kB at 7.4 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-api/3.0.0/surefire-api-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-api/3.0.0/surefire-api-3.0.0.pom (3.4 kB at 36 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-logger-api/3.0.0/surefire-logger-api-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-logger-api/3.0.0/surefire-logger-api-3.0.0.pom (3.2 kB at 66 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-shared-utils/3.0.0/surefire-shared-utils-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-shared-utils/3.0.0/surefire-shared-utils-3.0.0.pom (4.1 kB at 74 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-api/3.0.0/surefire-extensions-api-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-api/3.0.0/surefire-extensions-api-3.0.0.pom (3.2 kB at 42 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-booter/3.0.0/surefire-booter-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-booter/3.0.0/surefire-booter-3.0.0.pom (4.3 kB at 90 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-spi/3.0.0/surefire-extensions-spi-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-spi/3.0.0/surefire-extensions-spi-3.0.0.pom (1.7 kB at 33 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/1.0.0.v20140518/aether-util-1.0.0.v20140518.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/1.0.0.v20140518/aether-util-1.0.0.v20140518.pom (2.2 kB at 46 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether/1.0.0.v20140518/aether-1.0.0.v20140518.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether/1.0.0.v20140518/aether-1.0.0.v20140518.pom (30 kB at 443 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-api/1.0.0.v20140518/aether-api-1.0.0.v20140518.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-api/1.0.0.v20140518/aether-api-1.0.0.v20140518.pom (1.9 kB at 23 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.1.1/maven-common-artifact-filters-3.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.1.1/maven-common-artifact-filters-3.1.1.pom (5.8 kB at 73 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.2.5/maven-artifact-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.2.5/maven-artifact-3.2.5.pom (2.3 kB at 50 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.2.5/maven-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.2.5/maven-3.2.5.pom (22 kB at 367 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.2.5/maven-core-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.2.5/maven-core-3.2.5.pom (8.1 kB at 161 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.2.5/maven-settings-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.2.5/maven-settings-3.2.5.pom (2.2 kB at 50 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.2.5/maven-settings-builder-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.2.5/maven-settings-builder-3.2.5.pom (2.6 kB at 60 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.2.5/maven-repository-metadata-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.2.5/maven-repository-metadata-3.2.5.pom (2.2 kB at 34 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.2.5/maven-plugin-api-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.2.5/maven-plugin-api-3.2.5.pom (3.0 kB at 33 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/org.eclipse.sisu.plexus/0.3.5/org.eclipse.sisu.plexus-0.3.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/org.eclipse.sisu.plexus/0.3.5/org.eclipse.sisu.plexus-0.3.5.pom (4.3 kB at 46 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/sisu-plexus/0.3.5/sisu-plexus-0.3.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/sisu-plexus/0.3.5/sisu-plexus-0.3.5.pom (14 kB at 199 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.pom (13 kB at 158 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/net/java/jvnet-parent/3/jvnet-parent-3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/java/jvnet-parent/3/jvnet-parent-3.pom (4.8 kB at 83 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/javax/enterprise/cdi-api/1.2/cdi-api-1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/javax/enterprise/cdi-api/1.2/cdi-api-1.2.pom (6.3 kB at 73 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/weld/weld-parent/26/weld-parent-26.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/weld/weld-parent/26/weld-parent-26.pom (32 kB at 521 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/org.eclipse.sisu.inject/0.3.5/org.eclipse.sisu.inject-0.3.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/org.eclipse.sisu.inject/0.3.5/org.eclipse.sisu.inject-0.3.5.pom (2.6 kB at 22 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/sisu-inject/0.3.5/sisu-inject-0.3.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/sisu/sisu-inject/0.3.5/sisu-inject-0.3.5.pom (14 kB at 215 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.5.2/plexus-classworlds-2.5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.5.2/plexus-classworlds-2.5.2.pom (7.3 kB at 97 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.2.5/maven-model-builder-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.2.5/maven-model-builder-3.2.5.pom (3.0 kB at 37 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.2.5/maven-aether-provider-3.2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.2.5/maven-aether-provider-3.2.5.pom (4.2 kB at 52 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-spi/1.0.0.v20140518/aether-spi-1.0.0.v20140518.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-spi/1.0.0.v20140518/aether-spi-1.0.0.v20140518.pom (2.1 kB at 32 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-impl/1.0.0.v20140518/aether-impl-1.0.0.v20140518.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-impl/1.0.0.v20140518/aether-impl-1.0.0.v20140518.pom (3.5 kB at 49 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/3.2.3/sisu-guice-3.2.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/3.2.3/sisu-guice-3.2.3.pom (11 kB at 73 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-parent/3.2.3/guice-parent-3.2.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-parent/3.2.3/guice-parent-3.2.3.pom (13 kB at 190 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/38/forge-parent-38.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/38/forge-parent-38.pom (19 kB at 354 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/16.0.1/guava-16.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/16.0.1/guava-16.0.1.pom (6.1 kB at 70 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/16.0.1/guava-parent-16.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/16.0.1/guava-parent-16.0.1.pom (7.3 kB at 147 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/maven-surefire-common/3.0.0/maven-surefire-common-3.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/maven-surefire-common/3.0.0/maven-surefire-common-3.0.0.jar (308 kB at 2.2 MB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-api/3.0.0/surefire-api-3.0.0.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-api/3.0.0/surefire-extensions-api-3.0.0.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-logger-api/3.0.0/surefire-logger-api-3.0.0.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-spi/3.0.0/surefire-extensions-spi-3.0.0.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-booter/3.0.0/surefire-booter-3.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-api/3.0.0/surefire-api-3.0.0.jar (171 kB at 1.3 MB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/1.0.0.v20140518/aether-util-1.0.0.v20140518.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-api/3.0.0/surefire-extensions-api-3.0.0.jar (26 kB at 151 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-api/1.0.0.v20140518/aether-api-1.0.0.v20140518.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-logger-api/3.0.0/surefire-logger-api-3.0.0.jar (14 kB at 62 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.1.1/maven-common-artifact-filters-3.1.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/1.0.0.v20140518/aether-util-1.0.0.v20140518.jar (146 kB at 648 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-shared-utils/3.0.0/surefire-shared-utils-3.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-extensions-spi/3.0.0/surefire-extensions-spi-3.0.0.jar (8.2 kB at 34 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.1.1/maven-common-artifact-filters-3.1.1.jar (61 kB at 189 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-booter/3.0.0/surefire-booter-3.0.0.jar (118 kB at 361 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-api/1.0.0.v20140518/aether-api-1.0.0.v20140518.jar (136 kB at 414 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-shared-utils/3.0.0/surefire-shared-utils-3.0.0.jar (2.1 MB at 2.2 MB/s)
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-junit-platform/3.0.0/surefire-junit-platform-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-junit-platform/3.0.0/surefire-junit-platform-3.0.0.pom (4.5 kB at 66 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-providers/3.0.0/surefire-providers-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-providers/3.0.0/surefire-providers-3.0.0.pom (2.5 kB at 45 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/common-java5/3.0.0/common-java5-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/common-java5/3.0.0/common-java5-3.0.0.pom (2.7 kB at 27 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.3.2/junit-platform-launcher-1.3.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.3.2/junit-platform-launcher-1.3.2.pom (2.2 kB at 24 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.3.2/junit-platform-engine-1.3.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.3.2/junit-platform-engine-1.3.2.pom (2.4 kB at 44 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.3.2/junit-platform-commons-1.3.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.3.2/junit-platform-commons-1.3.2.pom (2.0 kB at 29 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-junit-platform/3.0.0/surefire-junit-platform-3.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/surefire-junit-platform/3.0.0/surefire-junit-platform-3.0.0.jar (27 kB at 332 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/common-java5/3.0.0/common-java5-3.0.0.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.3.2/junit-platform-engine-1.3.2.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.3.2/junit-platform-launcher-1.3.2.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.3.2/junit-platform-commons-1.3.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/surefire/common-java5/3.0.0/common-java5-3.0.0.jar (18 kB at 288 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.3.2/junit-platform-commons-1.3.2.jar (78 kB at 915 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.3.2/junit-platform-launcher-1.3.2.jar (95 kB at 936 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.3.2/junit-platform-engine-1.3.2.jar (138 kB at 911 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.9.3/junit-platform-launcher-1.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.9.3/junit-platform-launcher-1.9.3.pom (3.0 kB at 48 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.9.3/junit-platform-launcher-1.9.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-launcher/1.9.3/junit-platform-launcher-1.9.3.jar (169 kB at 1.2 MB/s)
+[INFO]
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.demoweb.app.DemoWebApplicationTests
+21:11:39.253 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.demoweb.app.DemoWebApplicationTests]: DemoWebApplicationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+21:11:39.607 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.demoweb.app.DemoWebApplication for test class com.demoweb.app.DemoWebApplicationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.1.1)
+
+2023-06-26T21:11:40.910-05:00  INFO 11024 --- [           main] c.demoweb.app.DemoWebApplicationTests    : Starting DemoWebApplicationTests using Java 17.0.7 with PID 11024 (started by Tino in E:\Java\Spring\DemoWeb)
+2023-06-26T21:11:40.914-05:00  INFO 11024 --- [           main] c.demoweb.app.DemoWebApplicationTests    : No active profile set, falling back to 1 default profile: "default"
+2023-06-26T21:11:44.705-05:00  INFO 11024 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page template: index
+2023-06-26T21:11:44.950-05:00  INFO 11024 --- [           main] c.demoweb.app.DemoWebApplicationTests    : Started DemoWebApplicationTests in 4.8 seconds (process running for 8.046)
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.892 s - in com.demoweb.app.DemoWebApplicationTests
+[INFO]
+[INFO] Results:
+[INFO]
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO]
+[INFO] --- jar:3.3.0:jar (default-jar) @ DemoWeb ---
+[INFO] Building jar: E:\Java\Spring\DemoWeb\target\DemoWeb-0.0.1-SNAPSHOT.jar
+[INFO]
+[INFO] --- spring-boot:3.1.1:repackage (repackage) @ DemoWeb ---
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.1/spring-boot-buildpack-platform-3.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.1/spring-boot-buildpack-platform-3.1.1.pom (3.2 kB at 70 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.pom (19 kB at 247 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.14.2/jackson-base-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.14.2/jackson-base-2.14.2.pom (10 kB at 120 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.2/jackson-bom-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.2/jackson-bom-2.14.2.pom (17 kB at 165 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.pom (6.2 kB at 117 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.pom (7.0 kB at 115 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.pom (4.4 kB at 47 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.14.2/jackson-modules-java8-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.14.2/jackson-modules-java8-2.14.2.pom (3.1 kB at 39 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.pom (6.0 kB at 90 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5-parent/5.2.1/httpclient5-parent-5.2.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5-parent/5.2.1/httpclient5-parent-5.2.1.pom (17 kB at 228 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/httpcomponents-parent/13/httpcomponents-parent-13.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/httpcomponents-parent/13/httpcomponents-parent-13.pom (30 kB at 617 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.pom (3.9 kB at 31 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-parent/5.2/httpcore5-parent-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-parent/5.2/httpcore5-parent-5.2.pom (14 kB at 193 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.pom (3.6 kB at 58 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.1/spring-boot-loader-tools-3.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.1/spring-boot-loader-tools-3.1.1.pom (2.2 kB at 39 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.1/spring-boot-buildpack-platform-3.1.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.1/spring-boot-buildpack-platform-3.1.1.jar (256 kB at 2.0 MB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.jar
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar
+Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar (77 kB at 1.3 MB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.jar (9.5 kB at 121 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.jar (237 kB at 699 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.1/spring-boot-loader-tools-3.1.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar (840 kB at 1.9 MB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.1/spring-boot-loader-tools-3.1.1.jar (251 kB at 395 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.jar (853 kB at 893 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar (459 kB at 460 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar (1.6 MB at 1.3 MB/s)
+[INFO] Replacing main artifact E:\Java\Spring\DemoWeb\target\DemoWeb-0.0.1-SNAPSHOT.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to E:\Java\Spring\DemoWeb\target\DemoWeb-0.0.1-SNAPSHOT.jar.original
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  36.494 s
+[INFO] Finished at: 2023-06-26T21:11:56-05:00
+[INFO] ------------------------------------------------------------------------
+
+Se descarga todas las dependencias y se genera el build.
+
+3. Ejecutar el build con el comando: java -jar .\target\DemoWeb-0.0.1-SNAPSHOT.jar
+
+El resultado debería ser:
+
+PS E:\Java\Spring\DemoWeb> java -jar .\target\DemoWeb-0.0.1-SNAPSHOT.jar
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.1.1)
+
+2023-06-26T21:17:03.472-05:00  INFO 12008 --- [           main] com.demoweb.app.DemoWebApplication       : Starting DemoWebApplication v0.0.1-SNAPSHOT using Java 17.0.7 with PID 12008 (E:\Java\Spring\DemoWeb\target\DemoWeb-0.0.1-SNAPSHOT.jar started by Tino in E:\Java\Spring\DemoWeb)
+2023-06-26T21:17:03.478-05:00  INFO 12008 --- [           main] com.demoweb.app.DemoWebApplication       : No active profile set, falling back to 1 default profile: "default"
+2023-06-26T21:17:05.372-05:00  INFO 12008 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2023-06-26T21:17:05.402-05:00  INFO 12008 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2023-06-26T21:17:05.404-05:00  INFO 12008 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.10]
+2023-06-26T21:17:05.665-05:00  INFO 12008 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2023-06-26T21:17:05.673-05:00  INFO 12008 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 2057 ms
+2023-06-26T21:17:06.046-05:00  INFO 12008 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page template: index
+2023-06-26T21:17:06.448-05:00  INFO 12008 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8080 (http) with context path ''
+2023-06-26T21:17:06.483-05:00  INFO 12008 --- [           main] com.demoweb.app.DemoWebApplication       : Started DemoWebApplication in 3.793 seconds (process running for 4.521)
+
+

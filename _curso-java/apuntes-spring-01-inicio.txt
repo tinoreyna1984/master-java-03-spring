@@ -1,0 +1,81 @@
+Spring Framework
+****************
+
+Configurar Spring Tool Suite
+============================
+
+Ir al menú Help -> Eclipse Marketplace -> Instalar Eclipse Web Developer Tools
+
+Crear un proyecto Spring Starter (Spring Boot) con Spring Tool Suite
+=====================================================================
+
+Tipo: Maven
+Paquete: jar/war (por defecto jar)
+Definir grupo y paquete con el mismo nombre
+Versión de Spring Boot: dejar la que viene por defecto (la más reciente)
+
+Dependencias:
+Spring Web (la más importante si hay otras)
+Spring Boot DevTools (recomendado para desarrollo web, ayuda a actualizaciones en vivo del app durante la codificación)
+Thymeleaf (para las vistas web)
+
+Click en "Finish".
+
+Esperar hasta que se completa la configuración.
+
+Configuraciones
+===============
+
+application.properties: documento de configuración en src/main/resources
+
+Las configuraciones más comunes en ese archivo son:
+
+1. Configuración del servidor web:
+   - `server.port`: especifica el puerto en el que se ejecutará la aplicación web.
+   - `server.servlet.context-path`: establece el contexto de la aplicación.
+
+2. Configuración de la base de datos:
+   - `spring.datasource.url`: especifica la URL de conexión de la base de datos.
+   - `spring.datasource.username` y `spring.datasource.password`: proporcionan las credenciales de la base de datos.
+   - `spring.datasource.driver-class-name`: define el controlador JDBC utilizado.
+
+3. Configuración de Hibernate:
+   - `spring.jpa.hibernate.ddl-auto`: define cómo Hibernate manejará la creación y actualización del esquema de la base de datos.
+   - `spring.jpa.show-sql`: muestra las consultas SQL generadas por Hibernate.
+
+4. Configuración de logging:
+   - `logging.level.*`: establece el nivel de log para paquetes o clases específicas.
+   - `logging.file`: especifica el archivo de registro.
+   - `logging.pattern.console`: define el patrón de registro en la consola.
+   - `logging.pattern.file`: define el patrón de registro en el archivo.
+
+5. Configuración de perfiles:
+   - `spring.profiles.active`: especifica los perfiles activos para la aplicación.
+
+6. Otras configuraciones comunes:
+   - `spring.application.name`: define el nombre de la aplicación.
+   - `spring.messages.basename`: establece la ubicación de los archivos de mensajes.
+
+
+Importar proyecto existente en Spring Tools Suite
+=================================================
+
+1. Click en Menu -> Import -> Maven -> Existing Maven Projects
+2. Ir a la carpeta del proyecto.
+3. Escoger el archivo Maven del proyecto deseado.
+4. Finalizar.
+
+
+
+Importar proyecto existente en IntelliJ IDEA
+============================================
+
+1. Click en Open -> escoger carpeta del proyecto creado con Spring Boot Initializr
+2. Aceptar.
+3. Para ejecutar el proyecto, click en la pestaña Maven -> Plugins -> Spring Boot -> run
+
+
+
+
+
+

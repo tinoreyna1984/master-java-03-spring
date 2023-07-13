@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title>Index - envío de parámetros</title>
+</head>
+<body>
+
+<ul>
+	<li>
+		<a th:href="@{/params/string(texto='Hola Tino')}">/params/string?texto=texto=Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/params/string(texto='Todo bien?')}">/params/string?texto=texto=Todo bien?</a>
+	</li>
+	<li>
+		<a th:href="@{/params/mix-params(saludo='Hola, Tino, qué tal?', numero=10)}">/params/string?saludo=Hola, Tino, qué tal?</a>
+	</li>
+	<li>
+		<a th:href="@{/params/mix-params-request(saludo='Hola, Tino, qué tal?', numero=10)}">/params/string?saludo=Hola, Tino, qué tal?</a>
+	</li>
+</ul>
+</body>
+</html>

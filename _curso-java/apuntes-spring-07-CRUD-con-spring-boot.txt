@@ -1,0 +1,323 @@
+Spring - CRUD con Spring
+************************
+
+Estructura de paquetes
+======================
+
+- com.dominio.app
+- - com.dominio.app.controllers
+    * clases @RestController
+- - com.dominio.app.models
+- - - com.dominio.app.models.entity
+      * clases @Entity con @Table
+- - - com.dominio.app.models.repository
+      * interfaces heredadas de JpaRepository<ClaseEntity, TipoDatoPK>
+- - - com.dominio.app.models.services
+      * interfaz de servicio
+	  * clase que lo implementa
+
+
+Crear proyecto
+==============
+
+Crearlo desde el Sprint Tools Suite o desde el Spring Initializr (web) y descargarlo y extraerlo para ser abierto en NetBeans, IntelliJ IDEA, etc.
+
+Agregar las dependencias:
+* Spring Web
+* Lombok
+* Spring Boot Dev Tools
+* Validation
+* Spring Data JPA
+* MySQL Driver (o para otro motor de base de datos)
+* Spring Security
+
+Configurar application.properties:
+
+spring.datasource.url=jdbc:mysql://localhost/mi_esquema?useSSL=false
+spring.datasource.username=root
+spring.datasource.password=sasa
+#spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+spring.jpa.database-platform=org.hibernate.dialect.MySQL5InnoDBDialect
+spring.jpa.hibernate.ddl-auto=update
+logging.level.org.hibernate.SQL=debug
+spring.jpa.defer-datasource-initialization=true
+spring.sql.init.mode=always
+
+Las dos últimas líneas son para inicializar tablas con scripts SQL de inserción. Se requiere un archivo data.sql al nivel de application.properties.
+
+Seeding
+-------
+
+Después de configurar spring.jpa.defer-datasource-initialization y spring.sql.init.mode en application.properties, se puede inicializar tablas inmediatamente después de su creación:
+
+1. En src/main/resources crear un archivo llamado data.sql
+2. Llenarlo de scripts SQL que satisfagan las tablas que se van a crear vía Spring Data JPA.
+
+
+Entidades
+---------
+
+Crear las clases que representan la capa de persistencia en base de datos, particularmente tablas.
+Agregarles la anotación @Entity
+Crear getters y setters por cada atributo. Con Lombok no sería necesario, sino solo agregar las anotaciones Getter y Setter en cada uno.
+Se pueden crear constraints.
+
+Repositorios
+------------
+
+Crear una interfaz heredada de JpaRepository.
+
+Controladores
+-------------
+
+Los controladores REST se definen con la anotación @RestController
+Inyección de dependencia: @Autowired aplicable a la generación de repositorios
+Endpoint a nivel raíz: @RequestMapping("/api") desde la clase, genera: hostname:puerto/api
+Endpoint a nivel de método (GET, POST, PUT, DELETE, etc.): @GetMapping("/entidad"), @GetMapping("/entidad/{params}"), @PostMapping("/entidad"), @PutMapping("/entidad/{params}"), @DeleteMapping("/entidad/{params}")
+
+En los métodos:
+Paso de parámetros: @PathVariable Long id (e.g. la ID de un registro)
+Argumentos para validación: @Valid @RequestBody Nota nota, BindingResult result, para ello se requiere agregar la dependencia:
+
+<!-- Requerido para anotaciones no aplicadas a Spring 3.1.1 -->
+<dependency>
+	<groupId>org.hibernate</groupId>
+	<artifactId>hibernate-validator</artifactId>
+	<version>4.3.2.Final</version>
+</dependency>
+
+Los endpoints devuelven un objeto JSON generado por la clase ResponseEntity
+
+
+CORS
+----
+
+Crear configuración de CORS para todos los enlaces:
+
+package com.apirestcrud.primercrudspring.utils;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+@EnableWebMvc
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("*")
+                .allowedMethods("*")
+                .allowedHeaders("*")
+                /*.allowCredentials(true)*/;
+    }
+}
+
+
+Relaciones
+----------
+
+Tipo 1-1: por ejemplo, un usuario se puede asociar solo con un estudiante:
+
+Usuario:
+
+package com.springboot.crud.escuela.models.entities;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.validator.constraints.Email;
+
+import javax.validation.constraints.Size;
+import java.io.Serializable;
+import java.util.Date;
+
+@Entity
+@Table(name = "usuario")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Usuario implements Serializable {
+
+    @Id
+    @Column(name = "usuario_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // tabla externa de estudiante
+
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Estudiante estudiante;
+    // ...
+
+}
+
+Estudiante:
+
+package com.springboot.crud.escuela.models.entities;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.io.Serializable;
+
+@Entity
+@Table(name = "estudiante")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Estudiante implements Serializable {
+
+    @Id
+    @Column(name = "estudiante_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @OneToOne(cascade = CascadeType.ALL) // se asocia exactamente con un usuario del sistema
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
+}
+
+Tipo 1-N: por ejemplo, un rol es asignado a varios usuarios, pero un usuario solo debe tener un rol:
+
+Rol:
+
+package com.springboot.crud.escuela.models.entities;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.validator.constraints.NotBlank;
+
+import java.io.Serializable;
+import java.util.List;
+
+@Entity
+@Table(name = "rol")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Rol implements Serializable {
+
+    @Id
+    @Column(name = "rol_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "nombre_rol")
+    @NotBlank(message = "El nombre del rol no puede quedar en blanco")
+    private String nombre;
+
+    // "rol" es el objeto creado en Usuario (atributo)
+    // un rol puede ser designado a varios usuarios
+    @OneToMany(mappedBy = "rol", cascade = CascadeType.ALL)
+    private List<Usuario> usuarios;
+}
+
+
+Usuario:
+
+package com.springboot.crud.escuela.models.entities;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.validator.constraints.Email;
+
+import javax.validation.constraints.Size;
+import java.io.Serializable;
+import java.util.Date;
+
+@Entity
+@Table(name = "usuario")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Usuario implements Serializable {
+
+    @Id
+    @Column(name = "usuario_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // ...
+
+    // hace referencia a la clase Rol (muchos usuarios para un rol)
+    @ManyToOne
+    @JoinColumn(name = "rol_id")
+    private Rol rol;
+
+    // ...
+
+}
+
+En la clase Rol, la lista de tipo Usuario implica que puede haber uno o varias instancias de la clase Usuario asociadas a un rol específico, lo que después se materializa en base de datos.
+
+Tipo M-N: ejemplo de cursos con estudiantes:
+
+Curso
+
+public class Curso implements Serializable {
+    @Id
+    @Column(name = "curso_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // ...
+
+    // para la relación muchos a muchos con estudiantes
+    @ManyToMany(mappedBy = "cursos")
+    private List<Estudiante> estudiantes;
+
+    // ...
+
+}
+
+Estudiante
+
+public class Estudiante implements Serializable {
+
+    @Id
+    @Column(name = "estudiante_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // ...
+    // para la relación muchos a muchos con cursos
+    @ManyToMany(cascade = CascadeType.ALL)
+    @JoinTable(name = "estudiante_curso",
+            joinColumns = @JoinColumn(name = "estudiante_id"),
+            inverseJoinColumns = @JoinColumn(name = "curso_id"))
+    private List<Curso> cursos;
+}
+
+Tabla intermedia
+
+public class EstudianteCurso implements Serializable {
+    @Id
+    @Column(name = "id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // columnas para la relación muchos a muchos
+    @ManyToOne
+    @JoinColumn(name = "estudiante_id")
+    private Estudiante estudiante;
+    @ManyToOne
+    @JoinColumn(name = "curso_id")
+    private Curso curso;
+
+}
+
+
+
+
+

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title th:text="${titulo}">Recepción de parámetros</title>
+<link rel="stylesheet" type="text/css" th:href="@{/css/style.css}" />
+</head>
+<body>
+	<h1 class="color-rojo">Título de prueba</h1>
+<ul>
+	<li>
+		<a th:href="@{/variables/string/} + 'Hola Tino'">/variables/string/Hola Tino</a>
+	</li>
+	<li>
+		<a th:href="@{/variables/string/} + 'Hola Tino' + '/' + 10">/variables/string/Hola Tino/10</a>
+	</li>
+</ul>
+</body>
+</html>

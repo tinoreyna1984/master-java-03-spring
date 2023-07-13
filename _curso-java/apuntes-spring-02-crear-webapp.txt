@@ -1,0 +1,103 @@
+Spring Framework
+****************
+
+Crear una webapp
+================
+
+Controladores
+-------------
+
+1. Crear un paquete para controladores
+2. Crear en ese paquete clases que representan a controladores para el webapp
+
+package com.demoweb.app.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+// anotación que indica que es un controlador
+@Controller
+public class IndexController {
+
+	// anotación GetMapping: indica que el método es del tipo GET
+	// existen anotaciones también para POST, PUT, DELETE, etc.
+	@GetMapping({"/index", "/home", "/"}) // puede ser solo "/index" o un arreglo de endpoints para determinar el home
+	public String index() {
+		return "index";
+	}
+}
+
+Vista
+-----
+
+Se crea en src/main/resources/templates
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Prueba</title>
+</head>
+<body>
+	<h1>Hola Spring</h1>
+</body>
+</html>
+
+La codificación debe ser en UTF-8 por ser estándar. Es compatible con Thymeleaf.
+
+Ejecutar el proyecto
+--------------------
+
+Click derecho en el proyecto -> Run As -> Spring Boot App
+
+Ir al sitio web: localhost:8080
+
+
+Pasar datos desde el controlador a la vista
+-------------------------------------------
+
+Modificar el controlador:
+
+@Controller
+public class IndexController {
+
+	// anotación GetMapping: indica que el método es del tipo GET
+	// existen anotaciones también para POST, PUT, DELETE, etc.
+	@GetMapping({"/index", "/home", "/"}) // puede ser solo "index" o un arreglo de endpoints para determinar el home
+	public String index(Model model) { // pasar un parámetro tipo Model
+		model.addAttribute("titulo", "Hola Spring"); // definir en forma de clave-valor un atributo y su valor
+		return "index";
+	}
+}
+
+Modificar la vista:
+
+<body>
+	<h1 th:text="${titulo}"></h1>
+</body>
+
+
+Mapeo de rutas
+--------------
+
+@RequestMapping("/app") // la página aparecerá en localhost:8080/app
+public class IndexController {
+
+	// anotación GetMapping: indica que el método es del tipo GET
+	// existen anotaciones también para POST, PUT, DELETE, etc.
+	@GetMapping({"/index", "/home", "/", ""}) // puede ser solo "index" o un arreglo de endpoints para determinar el home (agregar "" para el caso con /app)
+	public String index(Model model) {
+		model.addAttribute("titulo", "Hola Spring");
+		return "index";
+	}
+}
+
+Permite determinar grupos de rutas para poder acceder a endpoints afines.
+
+
+
+
+
+
+
+

@@ -1,0 +1,14 @@
+Spring - Spring Data JPA
+************************
+
+Conceptos clave
+===============
+
+- Spring Data JPA: Es un subproyecto de Spring Framework que simplifica la implementación de repositorios basados en JPA. Proporciona una abstracción sobre JPA y permite realizar operaciones CRUD en la base de datos sin escribir código repetitivo.
+- Entidad: Una entidad en JPA es una clase que representa una tabla en la base de datos. Se anota con `@Entity` y generalmente tiene atributos que mapean a columnas en la tabla.
+- Repositorio: Un repositorio en Spring Data JPA es una interfaz que define métodos para realizar operaciones de acceso a datos. Extender `JpaRepository` proporciona automáticamente métodos predefinidos para realizar operaciones CRUD.
+- Controlador: Un controlador en Spring MVC (Modelo-Vista-Controlador) maneja las solicitudes HTTP entrantes y define los puntos finales del API. Se anota con `@RestController` y define métodos para manejar diferentes tipos de solicitudes HTTP (GET, POST, PUT, DELETE, etc.).
+- Anotaciones: Spring Framework utiliza varias anotaciones para configurar y personalizar el comportamiento de los componentes. Algunas de las anotaciones utilizadas en el ejemplo son `@Entity`, `@Repository`, `@RestController`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, etc.
+
+
+

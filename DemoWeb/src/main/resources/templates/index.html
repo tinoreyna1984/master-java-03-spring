@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+<title>Prueba</title>
+<link rel="stylesheet" type="text/css" th:href="@{/css/style.css}" />
+</head>
+<body>
+	<h1 th:text="${titulo}"></h1>
+	<h1 class="color-rojo">Título de prueba</h1>
+	
+	<table th:if="${!usuarios.isEmpty()}">
+		<thead>
+			<th>Nombre</th>
+			<th>Apellido</th>
+			<th>Email</th>
+		</thead>
+	</table>
+	
+	<img th:src="@{/images/music.png}" />
+</body>
+</html>

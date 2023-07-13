@@ -1,0 +1,190 @@
+Spring - Inyección de dependencias
+**********************************
+
+Es un patrón de diseño que consta de pasar a un objeto una referencia de otro objeto, de modo que el código tenga menos acoplamiento y sea mejor modularizado como también reutilizable. Se basa en el principio de la "inversión de control".
+
+Inversión de Control (IoC)
+==========================
+
+Concepto que garantiza la modularidad y reutilización del código por medio de la delegación del trabajo al framework. En lugar de aplicar programación imperativa, el framework de turno (en este caso, Spring) trabaja de forma declarativa por medio de la creación de un contenedor que se encarga de crear las instancias deseadas para ser utilizadas por las clases que actúan en el sistema.
+
+
+Formas de inyectar dependencias
+===============================
+
+1. Por constructor
+------------------
+
+La idea principal detrás de la inyección de dependencias por constructor es que una clase no debe crear directamente las instancias de las clases de las que depende, sino que estas dependencias se proporcionan externamente. En lugar de que una clase cree sus propias dependencias, se las pasamos como argumentos a su constructor.
+
+Veamos un ejemplo práctico. Supongamos que tenemos una clase `OrderService` que necesita una instancia de la clase `OrderRepository` para acceder y manipular los datos de las órdenes. En lugar de crear directamente una instancia de `OrderRepository` dentro de `OrderService`, podemos inyectarla a través del constructor de la siguiente manera:
+
+
+public class OrderService {
+    private OrderRepository orderRepository;
+
+    public OrderService(OrderRepository orderRepository) {
+        this.orderRepository = orderRepository;
+    }
+
+    // Métodos y lógica de la clase OrderService
+}
+
+
+En este ejemplo, la dependencia `OrderRepository` se pasa como argumento al constructor de `OrderService`. Ahora, cuando creamos una instancia de `OrderService`, debemos proporcionar una instancia de `OrderRepository`. Spring Boot se encargará de resolver y proporcionar la instancia adecuada de `OrderRepository` automáticamente.
+
+Para utilizar la inyección de dependencias por constructor en Spring Boot, debemos configurar los componentes correspondientes como beans administrados por Spring. Esto se puede lograr mediante la anotación `@Autowired` en el constructor de la clase o mediante la anotación `@Bean` en un método dentro de una clase de configuración.
+
+Por ejemplo, supongamos que tenemos una clase de configuración llamada `AppConfig` donde definimos los beans:
+
+
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public OrderRepository orderRepository() {
+        // Configuración y creación de la instancia de OrderRepository
+        return new OrderRepository();
+    }
+
+    @Bean
+    public OrderService orderService(OrderRepository orderRepository) {
+        return new OrderService(orderRepository);
+    }
+}
+
+
+En este caso, el método `orderRepository()` crea y configura una instancia de `OrderRepository`, que luego se pasa como argumento al método `orderService()`, donde se crea y configura la instancia de `OrderService`.
+
+Con la configuración anterior, cuando necesitemos utilizar `OrderService`, simplemente lo inyectamos en otras clases o componentes utilizando la anotación `@Autowired`:
+
+
+@Service
+public class OrderProcessingService {
+
+    private OrderService orderService;
+
+    @Autowired
+    public OrderProcessingService(OrderService orderService) {
+        this.orderService = orderService;
+    }
+
+    // Métodos y lógica de la clase OrderProcessingService
+}
+
+
+En este ejemplo, `OrderProcessingService` tiene una dependencia de `OrderService`, y Spring Boot se encargará de proporcionar una instancia de `OrderService` automáticamente mediante la inyección de dependencias por constructor.
+
+En resumen, la inyección de dependencias por constructor en Spring Boot nos permite proporcionar las dependencias necesarias a una clase a través de su constructor, lo que mejora la modularidad, la reutilización de código y facilita las pruebas unitarias.
+
+
+2. Por setters
+--------------
+
+En Spring Boot, la inyección de dependencias por setters es un mecanismo utilizado para suministrar dependencias a través de los métodos setters de una clase. Este enfoque permite que los objetos sean configurados con las dependencias requeridas sin la necesidad de construirlas directamente dentro de la clase.
+
+La inyección de dependencias es una técnica de diseño de software en la que los objetos se suministran con las dependencias que necesitan, en lugar de ser responsables de crear o buscar esas dependencias por sí mismos. Esto promueve la modularidad, el bajo acoplamiento y la reutilización de código, ya que los objetos pueden ser fácilmente intercambiados y probados con diferentes implementaciones de las dependencias.
+
+La inyección de dependencias por setters se basa en el principio de inyección de dependencias, pero en lugar de pasar las dependencias a través del constructor de una clase, se utilizan métodos setters para asignar las dependencias después de la construcción del objeto.
+
+A continuación, se presenta un ejemplo sencillo para ilustrar cómo se realiza la inyección de dependencias por setters en Spring Boot:
+
+Supongamos que tenemos una clase llamada `PaymentService` que necesita una implementación de la interfaz `PaymentGateway` para procesar los pagos. En lugar de crear directamente una instancia de `PaymentGateway` dentro de `PaymentService`, utilizaremos la inyección de dependencias por setters.
+
+
+public class PaymentService {
+    private PaymentGateway paymentGateway;
+
+    // Setter para la dependencia PaymentGateway
+    public void setPaymentGateway(PaymentGateway paymentGateway) {
+        this.paymentGateway = paymentGateway;
+    }
+
+    public void processPayment(double amount) {
+        // Lógica de procesamiento de pagos utilizando la dependencia PaymentGateway
+        paymentGateway.processPayment(amount);
+    }
+}
+
+
+En este ejemplo, la clase `PaymentService` tiene un método setter llamado `setPaymentGateway` que toma un objeto `PaymentGateway` como parámetro y lo asigna a la variable `paymentGateway`. Esto permite que la dependencia `PaymentGateway` sea suministrada desde fuera de la clase.
+
+Ahora, para utilizar el `PaymentService` con una implementación específica de `PaymentGateway`, se debe configurar la inyección de dependencias en el contexto de la aplicación de Spring Boot. Esto se puede lograr mediante el uso de anotaciones como `@Autowired` en el setter correspondiente:
+
+
+@Configuration
+public class AppConfig {
+    @Bean
+    public PaymentGateway paymentGateway() {
+        // Creación y configuración de la implementación de PaymentGateway
+        return new PayPalPaymentGateway();
+    }
+
+    @Bean
+    public PaymentService paymentService() {
+        PaymentService paymentService = new PaymentService();
+        paymentService.setPaymentGateway(paymentGateway());
+        return paymentService;
+    }
+}
+
+
+En este caso, se define un bean de Spring llamado `paymentGateway`, que proporciona una instancia de la implementación de `PaymentGateway`, como por ejemplo `PayPalPaymentGateway`. Luego, se define otro bean llamado `paymentService`, donde se crea una instancia de `PaymentService` y se utiliza el método `setPaymentGateway` para inyectar la dependencia `paymentGateway`.
+
+De esta manera, cuando se utiliza `PaymentService` en otras partes de la aplicación, Spring Boot se encargará automáticamente de inyectar la implementación correcta de `PaymentGateway` en el método setter correspondiente.
+
+En resumen, la inyección de dependencias por setters en
+
+ Spring Boot permite configurar las dependencias requeridas de una clase utilizando métodos setters, lo que facilita la modificación y prueba de los objetos, promoviendo la modularidad y el bajo acoplamiento en el diseño de la aplicación.
+
+
+3. Por propiedades
+------------------
+
+En lugar de crear manualmente las instancias de las dependencias o utilizar algún mecanismo de creación o búsqueda de dependencias, simplemente declaras una propiedad en una clase y anotas esa propiedad con una anotación especial de Spring, como `@Autowired`, para indicar que deseas que Spring se encargue de asignar automáticamente la dependencia a esa propiedad.
+
+Aquí hay un ejemplo sencillo para ilustrar la inyección de dependencias por propiedad en Spring Boot:
+
+Supongamos que tienes una aplicación de gestión de usuarios y necesitas una clase `UserService` que se encargue de interactuar con la capa de persistencia de datos para realizar operaciones CRUD en la tabla de usuarios. Para eso, tienes una interfaz `UserRepository` que define los métodos necesarios para acceder a la base de datos.
+
+Primero, defines la interfaz `UserRepository`:
+
+
+public interface UserRepository {
+    void save(User user);
+    User findById(long id);
+    List<User> findAll();
+    // Otros métodos de acceso a la base de datos
+}
+
+
+A continuación, implementas la clase `UserRepository` concreta, que se conecta a la base de datos y realiza las operaciones necesarias:
+
+
+@Repository
+public class UserRepositoryImpl implements UserRepository {
+    // Implementación de los métodos de acceso a la base de datos
+}
+
+
+En tu clase `UserService`, necesitas una instancia de `UserRepository` para poder realizar las operaciones de persistencia. En lugar de crear manualmente una instancia de `UserRepository`, puedes declararla como una propiedad y anotarla con `@Autowired` para que Spring la inyecte automáticamente:
+
+
+@Service
+public class UserService {
+    @Autowired
+    private UserRepository userRepository;
+
+    // Resto de métodos y lógica del servicio
+}
+
+
+Ahora, cuando Spring cree una instancia de `UserService`, buscará un bean (objeto administrado por Spring) de tipo `UserRepository` y lo asignará automáticamente a la propiedad `userRepository` de `UserService`.
+
+De esta manera, puedes utilizar `userRepository` en los métodos de `UserService` sin tener que preocuparte por la creación o búsqueda de la instancia de `UserRepository`. Spring se encarga de proporcionar la dependencia adecuada.
+
+La inyección de dependencias por propiedad en Spring Boot simplifica enormemente la gestión de dependencias, ya que elimina la necesidad de crear manualmente las instancias y acoplamientos entre las clases. Además, hace que el código sea más mantenible y flexible, ya que puedes cambiar fácilmente las implementaciones de las dependencias sin modificar la clase que las utiliza.
+
+Es importante tener en cuenta que para que la inyección de dependencias por propiedad funcione correctamente, debes asegurarte de que tanto la clase que declara la propiedad como la clase de la dependencia estén correctamente anotadas con las anotaciones adecuadas, como `@Service`, `@Repository` o `@Component`, para que Spring las reconozca y administre como beans. También debes asegurarte de tener habilitada la configuración de inyección de dependencias en tu aplicación Spring Boot.
+
+
