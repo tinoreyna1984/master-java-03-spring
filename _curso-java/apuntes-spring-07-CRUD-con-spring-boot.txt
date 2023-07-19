@@ -29,7 +29,6 @@ Agregar las dependencias:
 * Validation
 * Spring Data JPA
 * MySQL Driver (o para otro motor de base de datos)
-* Spring Security
 
 Configurar application.properties:
 
@@ -43,80 +42,91 @@ logging.level.org.hibernate.SQL=debug
 spring.jpa.defer-datasource-initialization=true
 spring.sql.init.mode=always
 
-Las dos últimas líneas son para inicializar tablas con scripts SQL de inserción. Se requiere un archivo data.sql al nivel de application.properties.
-
-Seeding
--------
-
-Después de configurar spring.jpa.defer-datasource-initialization y spring.sql.init.mode en application.properties, se puede inicializar tablas inmediatamente después de su creación:
-
-1. En src/main/resources crear un archivo llamado data.sql
-2. Llenarlo de scripts SQL que satisfagan las tablas que se van a crear vía Spring Data JPA.
+Las dos últimas líneas son para inicializar tablas con scripts SQL de inserción (seeding inicial). Se requiere un archivo data.sql al nivel de application.properties.
 
 
 Entidades
 ---------
 
-Crear las clases que representan la capa de persistencia en base de datos, particularmente tablas.
-Agregarles la anotación @Entity
-Crear getters y setters por cada atributo. Con Lombok no sería necesario, sino solo agregar las anotaciones Getter y Setter en cada uno.
-Se pueden crear constraints.
+* Crear las clases que representan la capa de persistencia en base de datos, particularmente tablas.
+* Agregarles la anotación @Entity
+* Crear getters y setters por cada atributo. Con Lombok no sería necesario, sino solo agregar las anotaciones Getter y Setter en cada uno.
+* Se pueden crear constraints.
+* Pueden ser tablas intermedias de una relación M-N.
 
-Repositorios
-------------
-
-Crear una interfaz heredada de JpaRepository.
-
-Controladores
--------------
-
-Los controladores REST se definen con la anotación @RestController
-Inyección de dependencia: @Autowired aplicable a la generación de repositorios
-Endpoint a nivel raíz: @RequestMapping("/api") desde la clase, genera: hostname:puerto/api
-Endpoint a nivel de método (GET, POST, PUT, DELETE, etc.): @GetMapping("/entidad"), @GetMapping("/entidad/{params}"), @PostMapping("/entidad"), @PutMapping("/entidad/{params}"), @DeleteMapping("/entidad/{params}")
-
-En los métodos:
-Paso de parámetros: @PathVariable Long id (e.g. la ID de un registro)
-Argumentos para validación: @Valid @RequestBody Nota nota, BindingResult result, para ello se requiere agregar la dependencia:
-
-<!-- Requerido para anotaciones no aplicadas a Spring 3.1.1 -->
-<dependency>
-	<groupId>org.hibernate</groupId>
-	<artifactId>hibernate-validator</artifactId>
-	<version>4.3.2.Final</version>
-</dependency>
-
-Los endpoints devuelven un objeto JSON generado por la clase ResponseEntity
+Ejemplo:
 
 
-CORS
-----
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.validator.constraints.Email;
 
-Crear configuración de CORS para todos los enlaces:
+import javax.validation.constraints.Size;
+import java.io.Serializable;
+import java.util.Date;
 
-package com.apirestcrud.primercrudspring.utils;
+@Entity
+@Table(name = "usuario")
+@Getter
+@Setter
+@NoArgsConstructor
+public class Usuario implements Serializable {
 
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.EnableWebMvc;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+    @Id
+    @Column(name = "usuario_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-@Configuration
-@EnableWebMvc
-public class CorsConfig implements WebMvcConfigurer {
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedOrigins("*")
-                .allowedMethods("*")
-                .allowedHeaders("*")
-                /*.allowCredentials(true)*/;
-    }
+    // tablas externas de estudiante y profesor
+
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Estudiante estudiante;
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Profesor profesor;
+
+    // hace referencia a la clase Rol (muchos usuarios para un rol)
+    /*@ManyToOne
+    @JoinColumn(name = "rol_id")
+    private Rol rol;*/
+
+    private String nombre;
+
+    private String apellido;
+
+    @Column(name = "doc_identidad")
+    private String docIdentidad;
+
+    @Column(name = "fecha_nacimiento")
+    private Date fechaNacimiento;
+
+    private String username;
+
+    @Size(min = 6, max = 16, message = "La clave debe constar de 6 a 16 caracteres")
+    private String password;
+
+    @Email(message = "No válido. Asegúrate de que sea un correo electrónico")
+    private String email;
+
+    @Column(name = "fecha_creacion", insertable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
+    @Temporal(TemporalType.DATE)
+    @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss", timezone="America/Guayaquil")
+    private Date fechaCreacion;
+
+    @Column(name = "fecha_actualizacion", columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
+    @Temporal(TemporalType.DATE)
+    @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss", timezone="America/Guayaquil")
+    private Date fechaActualizacion;
+
 }
 
 
-Relaciones
-----------
+
+
+Relaciones entre entidades
+--------------------------
 
 Tipo 1-1: por ejemplo, un usuario se puede asociar solo con un estudiante:
 
@@ -316,6 +326,223 @@ public class EstudianteCurso implements Serializable {
     private Curso curso;
 
 }
+
+Prevenir errores de recursión ocurridas en las relaciones entre entidades (Jackson)
+-----------------------------------------------------------------------------------
+
+Uno a uno:
+
+public class Usuario implements Serializable {
+
+    @Id
+    @Column(name = "usuario_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // tablas externas de estudiante y profesor
+
+    @JsonManagedReference
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Estudiante estudiante;
+    @JsonManagedReference
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private Profesor profesor;
+
+    // ...
+}
+
+Usuario-Estudiante
+
+public class Estudiante implements Serializable {
+
+    @Id
+    @Column(name = "estudiante_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @JsonBackReference
+    @OneToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
+
+    // ...
+}
+
+Usuario-Profesor
+
+public class Profesor implements Serializable {
+    @Id
+    @Column(name = "profesor_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @JsonBackReference
+    @OneToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
+
+
+    // ...
+}
+
+Ayuda a prevenir errores de deserialización de la entidad receptora en relaciones uno a uno o uno a muchos.
+
+Para relaciones de muchos a muchos, usar: @JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id"), donde property es la columna de la clase del ID o clave primaria que tiene propiedad de identificación. Ejemplo:
+
+@JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class,
+        property = "id")
+public class Estudiante implements Serializable {
+
+    @Id
+    @Column(name = "estudiante_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @JsonBackReference
+    @OneToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
+
+    // para la relación muchos a muchos con cursos
+    @ManyToMany(cascade = CascadeType.ALL)
+    @JoinTable(name = "estudiante_curso",
+            joinColumns = @JoinColumn(name = "estudiante_id"),
+            inverseJoinColumns = @JoinColumn(name = "curso_id"))
+    private List<Curso> cursos;
+}
+
+
+Ignorar valores nulos en una entidad
+------------------------------------
+
+Agregar @JsonInclude(JsonInclude.Include.NON_NULL) en la definición de la entidad.
+
+
+Ignorar campos para objetos JSON resultantes
+--------------------------------------------
+
+Aplicar @JsonIgnore al campo deseado.
+
+Seeding
+-------
+
+Después de configurar spring.jpa.defer-datasource-initialization y spring.sql.init.mode en application.properties, se puede inicializar tablas inmediatamente después de su creación:
+
+1. En src/main/resources crear un archivo llamado data.sql
+2. Llenarlo de scripts SQL que satisfagan las tablas que se van a crear vía Spring Data JPA.
+
+
+Repositorios
+------------
+
+Crear una interfaz heredada de JpaRepository.
+
+Si se desea implementar un repositorio con un código SQL personalizado, se puede por generar una lista basada en Map de clave-valor:
+
+public interface HorarioRepository  extends JpaRepository<Horario, Long> {
+    @Query(
+            nativeQuery = true,
+            value = "SELECT h.horario_id, c.nombre_curso, c.horas_teoria, c.horas_practica, u.nombre, u.apellido\n" +
+                    "from horario h, curso c, profesor p, usuario u\n" +
+                    "where h.profesor_id = p.profesor_id\n" +
+                    "and h.curso_id = c.curso_id\n" +
+                    "and p.usuario_id = u.usuario_id"
+    )
+    public List<Map<String, Object>> obtieneHorarios();
+
+}
+
+Y al usarla en un endpoint se tendría:
+
+    @GetMapping("/horarios")
+    public List<Map<String, Object>> listarHorarios(){
+        return horarioRepository.obtieneHorarios();
+    }
+
+
+Controladores
+-------------
+
+Los controladores REST se definen con la anotación @RestController
+Inyección de dependencia: @Autowired aplicable a la generación de repositorios
+Endpoint a nivel raíz: @RequestMapping("/api") desde la clase, genera: hostname:puerto/api
+Endpoint a nivel de método (GET, POST, PUT, DELETE, etc.): @GetMapping("/entidad"), @GetMapping("/entidad/{params}"), @PostMapping("/entidad"), @PutMapping("/entidad/{params}"), @DeleteMapping("/entidad/{params}")
+
+En los métodos:
+Paso de parámetros: @PathVariable Long id (e.g. la ID de un registro)
+Argumentos para validación: @Valid @RequestBody Nota nota, BindingResult result, para ello se requiere agregar la dependencia:
+
+<!-- Requerido para anotaciones no aplicadas a Spring 3.1.1 -->
+<dependency>
+	<groupId>org.hibernate</groupId>
+	<artifactId>hibernate-validator</artifactId>
+	<version>4.3.2.Final</version>
+</dependency>
+
+Los endpoints devuelven un objeto JSON generado por la clase ResponseEntity
+
+
+CORS
+----
+
+Crear configuración de CORS para todos los enlaces:
+
+package com.apirestcrud.primercrudspring.utils;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+@EnableWebMvc
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("*")
+                .allowedMethods("*")
+                .allowedHeaders("*")
+                /*.allowCredentials(true)*/;
+    }
+}
+
+Spring Security + JWT
+=====================
+
+Agregar Spring Security en pom.xml:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+Para JSON Web Token (JWT):
+
+		<!-- JWT -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+
+Recargar el proyecto para instalar las dependencias (Maven).
+
+Para trabajar con este tipo de tecnologías, se requiere una clase Entity de usuarios para el login.
+
+Luego, se debe crear un paquete llamado "security" y una clase WebSecurityConfig:
+
+
 
 
 
