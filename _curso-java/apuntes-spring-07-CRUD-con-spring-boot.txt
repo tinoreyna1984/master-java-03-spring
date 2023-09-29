@@ -82,9 +82,9 @@ public class Usuario implements Serializable {
 
     // tablas externas de estudiante y profesor
 
-    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY)
     private Estudiante estudiante;
-    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY)
     private Profesor profesor;
 
     // hace referencia a la clase Rol (muchos usuarios para un rol)
@@ -159,7 +159,7 @@ public class Usuario implements Serializable {
 
     // tabla externa de estudiante
 
-    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY)
     private Estudiante estudiante;
     // ...
 
@@ -188,7 +188,7 @@ public class Estudiante implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(cascade = CascadeType.ALL) // se asocia exactamente con un usuario del sistema
+    @OneToOne // se asocia exactamente con un usuario del sistema
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 }
@@ -226,7 +226,7 @@ public class Rol implements Serializable {
 
     // "rol" es el objeto creado en Usuario (atributo)
     // un rol puede ser designado a varios usuarios
-    @OneToMany(mappedBy = "rol", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "rol")
     private List<Usuario> usuarios;
 }
 
@@ -302,7 +302,7 @@ public class Estudiante implements Serializable {
 
     // ...
     // para la relación muchos a muchos con cursos
-    @ManyToMany(cascade = CascadeType.ALL)
+    @ManyToMany
     @JoinTable(name = "estudiante_curso",
             joinColumns = @JoinColumn(name = "estudiante_id"),
             inverseJoinColumns = @JoinColumn(name = "curso_id"))
@@ -330,6 +330,20 @@ public class EstudianteCurso implements Serializable {
 Prevenir errores de recursión ocurridas en las relaciones entre entidades (Jackson)
 -----------------------------------------------------------------------------------
 
+Se recomienda (pom.xml):
+
+		<!--Jackson-->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>2.15.2</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.15.2</version>
+		</dependency>
+
 Uno a uno:
 
 public class Usuario implements Serializable {
@@ -342,10 +356,10 @@ public class Usuario implements Serializable {
     // tablas externas de estudiante y profesor
 
     @JsonManagedReference
-    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY)
     private Estudiante estudiante;
     @JsonManagedReference
-    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "usuario", fetch = FetchType.LAZY)
     private Profesor profesor;
 
     // ...
@@ -361,7 +375,7 @@ public class Estudiante implements Serializable {
     private Long id;
 
     @JsonBackReference
-    @OneToOne(cascade = CascadeType.ALL)
+    @OneToOne
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
@@ -377,7 +391,7 @@ public class Profesor implements Serializable {
     private Long id;
 
     @JsonBackReference
-    @OneToOne(cascade = CascadeType.ALL)
+    @OneToOne
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
@@ -399,7 +413,7 @@ public class Estudiante implements Serializable {
     private Long id;
 
     @JsonBackReference
-    @OneToOne(cascade = CascadeType.ALL)
+    @OneToOne
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 

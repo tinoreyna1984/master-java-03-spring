@@ -1,0 +1,685 @@
+Spring Security
+***************
+
+Crear proyecto con entidades y controladores
+============================================
+
+Crear desde el Initializr de Spring con las siguientes dependencias:
+
+* Spring Web
+* Spring Data JPA
+* Spring Security
+* Validation
+* Lombok
+* Spring Boot Dev Tools
+* MySQL Driver (o para otro motor de base de datos)
+
+Descomprimirlo y abrirlo con IntelliJ IDEA.
+
+Crear los siguientes paquetes:
+
+- controller
+- entity
+- repository
+- service
+- dto
+- config.security
+- util
+
+Crear las clases e interfaces para entidades, controladores y repositorios
+
+Controladores:
+- AuthenticationController
+- ProductController
+Entidades:
+- Product
+- User
+Repositorios:
+- ProductRepository
+- UserRepository
+
+En util, crear dos enumeraciones: para rol y permisos
+
+En particular, User debe tener una estructura como la que sigue:
+
+package com.cursos.springsecuritycourse.entity;
+
+import com.cursos.springsecuritycourse.util.Role;
+import jakarta.persistence.*;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Entity
+@Table(name = "\"user\"")
+public class User implements UserDetails {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String username;
+    private String name;
+    private String password;
+
+    @Enumerated(EnumType.STRING)
+    private Role role;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+
+        List<GrantedAuthority> authorities = role.getPermissions().stream()
+                .map(permissionEnum -> new SimpleGrantedAuthority(permissionEnum.name()))
+                .collect(Collectors.toList());
+
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name()));
+
+        return authorities;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
+    }
+}
+
+Configurar application.properties:
+
+spring.datasource.url=jdbc:mysql://localhost/mi_esquema?useSSL=false
+spring.datasource.username=root
+spring.datasource.password=sasa
+#spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+spring.jpa.database-platform=org.hibernate.dialect.MySQL5InnoDBDialect
+spring.jpa.hibernate.ddl-auto=update
+logging.level.org.hibernate.SQL=debug
+spring.jpa.defer-datasource-initialization=true
+spring.sql.init.mode=always
+
+Las dos últimas líneas son para inicializar tablas con scripts SQL de inserción (seeding inicial). Se requiere un archivo data.sql al nivel de application.properties.
+
+
+
+Authentication Manager
+======================
+
+En config.security:
+
+package com.cursos.springsecuritycourse.config.security;
+
+import com.cursos.springsecuritycourse.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+
+@Component
+public class SecurityBeansInjector {
+
+    // 1. Inyectar una instancia de UserRepository
+    @Autowired
+    private UserRepository userRepository;
+
+    // 2. Crear tres métodos que generan bean necesarios para la inyección de seguridad:
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();//ProviderManager implements AuthenticationManager
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService());
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService(){
+        return username -> {
+            return userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+        };
+    }
+
+}
+
+
+Configuración de Seguridad HTTP
+===============================
+
+package com.cursos.springsecuritycourse.config.security;
+
+import com.cursos.springsecuritycourse.config.security.filter.JwtAuthenticationFilter;
+import com.cursos.springsecuritycourse.util.Permission;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.stereotype.Component;
+
+@Component
+@EnableWebSecurity
+@EnableMethodSecurity // si se quiere proteger rutas por métodos
+public class HttpSecurityConfig {
+
+    @Autowired
+    private AuthenticationProvider authenticationProvider;
+
+    @Autowired
+    private JwtAuthenticationFilter authenticationFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        http
+                .csrf( csrfConfig -> csrfConfig.disable() )
+                .sessionManagement( sessionMangConfig -> sessionMangConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS) )
+                .authenticationProvider(authenticationProvider)
+                .addFilterBefore(authenticationFilter, UsernamePasswordAuthenticationFilter.class)
+//                .authorizeHttpRequests(builderRequestMatchers())
+        ;
+
+        return http.build();
+    }
+
+    // esta es una alternativa a la protección por métodos
+    private static Customizer<AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry> builderRequestMatchers() {
+        return authConfig -> {
+
+            authConfig.requestMatchers(HttpMethod.POST, "/auth/authenticate").permitAll();
+            authConfig.requestMatchers(HttpMethod.GET, "/auth/public-access").permitAll();
+            authConfig.requestMatchers("/error").permitAll();
+
+            authConfig.requestMatchers(HttpMethod.GET, "/products").hasAuthority(Permission.READ_ALL_PRODUCTS.name());
+            authConfig.requestMatchers(HttpMethod.POST, "/products").hasAuthority(Permission.SAVE_ONE_PRODUCT.name());
+
+            authConfig.anyRequest().denyAll();
+        };
+    }
+
+}
+
+
+Encriptación de clave en consola
+================================
+
+En la clase principal (la que termina en Application) agregar:
+
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
+	@Bean
+	public CommandLineRunner createPasswordsCommand(){
+		return args -> {
+			System.out.println(passwordEncoder.encode("clave123"));
+			System.out.println(passwordEncoder.encode("clave456"));
+		};
+	}
+
+Por ejemplo:
+
+package com.cursos.springsecuritycourse;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@SpringBootApplication
+public class SpringSecurityCourseApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(SpringSecurityCourseApplication.class, args);
+	}
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
+	@Bean
+	public CommandLineRunner createPasswordsCommand(){
+		return args -> {
+			System.out.println(passwordEncoder.encode("clave123"));
+			System.out.println(passwordEncoder.encode("clave456"));
+		};
+	}
+
+}
+
+Ejecutar desde main. Esto ayudará a la encriptación de claves de usuarios.
+
+
+Dentro de config.security crear un paquete llamado filter con la clase JwtAuthenticationFilter:
+
+package com.cursos.springsecuritycourse.config.security.filter;
+
+import com.cursos.springsecuritycourse.entity.User;
+import com.cursos.springsecuritycourse.repository.UserRepository;
+import com.cursos.springsecuritycourse.service.JwtService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+
+        //1. Obtener el header que contiene el jwt
+        String authHeader = request.getHeader("Authorization"); // Bearer jwt
+
+        if(authHeader == null || !authHeader.startsWith("Bearer ")){
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        //2. Obtener jwt desde header
+        String jwt = authHeader.split(" ")[1];
+
+        //3. Obtener subject/username desde el jwt
+        String username = jwtService.extractUsername(jwt);
+
+        //4. Setear un objeto Authentication dentro del SecurityContext
+
+        User user = userRepository.findByUsername(username).get();
+        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                username, null, user.getAuthorities()
+        );
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        //5. Ejecutar el restro de filtros
+
+        filterChain.doFilter(request, response);
+    }
+}
+
+
+JWT
+===
+
+Agregar las siguientes dependencias en pom.xml:
+
+		<!-- JWT -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.11.5</version>
+		</dependency>
+
+Para su respectiva utilidad, crear el servicio JwtService:
+
+package com.cursos.springsecuritycourse.service;
+
+import com.cursos.springsecuritycourse.entity.User;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Header;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.security.Key;
+import java.util.Date;
+import java.util.Map;
+
+@Service
+public class JwtService {
+
+    @Value("${security.jwt.expiration-minutes}")
+    private long EXPIRATION_MINUTES;
+
+    @Value("${security.jwt.secret-key}")
+    private String SECRET_KEY;
+
+    public String generateToken(User user, Map<String, Object> extraClaims) {
+
+        Date issuedAt = new Date(System.currentTimeMillis());
+        Date expiration = new Date( issuedAt.getTime() + (EXPIRATION_MINUTES * 60 * 1000) );
+
+        return Jwts.builder()
+                .setClaims(extraClaims)
+                .setSubject(user.getUsername())
+                .setIssuedAt(issuedAt)
+                .setExpiration(expiration)
+                .setHeaderParam(Header.TYPE, Header.JWT_TYPE)
+                .signWith(generateKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    private Key generateKey(){
+        byte[] secretAsBytes = Decoders.BASE64.decode(SECRET_KEY);
+        System.out.println("mi clave es: " + new String(secretAsBytes));
+        return Keys.hmacShaKeyFor(secretAsBytes);
+    }
+
+    public String extractUsername(String jwt) {
+        return extractAllClaims(jwt).getSubject();
+    }
+
+    private Claims extractAllClaims(String jwt) {
+        return Jwts.parserBuilder().setSigningKey(generateKey()).build()
+                .parseClaimsJws(jwt).getBody();
+    }
+}
+
+
+Crear endpoint para login
+=========================
+
+package com.cursos.springsecuritycourse.controller;
+
+import com.cursos.springsecuritycourse.dto.AuthenticationRequest;
+import com.cursos.springsecuritycourse.dto.AuthenticationResponse;
+import com.cursos.springsecuritycourse.service.AuthenticationService;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/auth")
+public class AuthenticationController {
+
+
+    @Autowired
+    private AuthenticationService authenticationService;
+
+    @PreAuthorize("permitAll")
+    @PostMapping("/authenticate")
+    public ResponseEntity<AuthenticationResponse> login(
+            @RequestBody @Valid AuthenticationRequest authRequest){
+        AuthenticationResponse jwtDto = authenticationService.login(authRequest);
+        return ResponseEntity.ok(jwtDto);
+    }
+
+    @PreAuthorize("permitAll")
+    @GetMapping("/public-access")
+    public String publicAccessEndpoint(){
+        return "este endpoint es público";
+    }
+
+}
+
+Para authenticationService se crea:
+
+package com.cursos.springsecuritycourse.service;
+
+import com.cursos.springsecuritycourse.dto.AuthenticationRequest;
+import com.cursos.springsecuritycourse.dto.AuthenticationResponse;
+import com.cursos.springsecuritycourse.entity.User;
+import com.cursos.springsecuritycourse.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class AuthenticationService {
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtService jwtService;
+
+    public AuthenticationResponse login(AuthenticationRequest authRequest) {
+
+        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                authRequest.getUsername(), authRequest.getPassword()
+        );
+
+        authenticationManager.authenticate(authToken);
+
+        User user = userRepository.findByUsername(authRequest.getUsername()).get();
+
+        String jwt = jwtService.generateToken(user, generateExtraClaims(user));
+
+        return new AuthenticationResponse(jwt);
+    }
+
+    private Map<String, Object> generateExtraClaims(User user) {
+
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("name", user.getName());
+        extraClaims.put("role", user.getRole().name());
+        extraClaims.put("permissions", user.getAuthorities());
+
+        return extraClaims;
+    }
+}
+
+Para el requerimiento y la respuesta se requiere crear clases que se inyectarán en el controlador (clases POJO):
+
+package com.cursos.springsecuritycourse.dto;
+
+public class AuthenticationRequest {
+
+    private String username;
+    private String password;
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+
+package com.cursos.springsecuritycourse.dto;
+
+public class AuthenticationResponse {
+
+    private String jwt;
+
+    public AuthenticationResponse(String jwt) {
+        this.jwt = jwt;
+    }
+
+    public String getJwt() {
+        return jwt;
+    }
+
+    public void setJwt(String jwt) {
+        this.jwt = jwt;
+    }
+}
+
+Protección por métodos
+======================
+
+package com.cursos.springsecuritycourse.controller;
+
+import com.cursos.springsecuritycourse.entity.Product;
+import com.cursos.springsecuritycourse.repository.ProductRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/products")
+public class ProductController {
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @PreAuthorize("hasAuthority('READ_ALL_PRODUCTS')")
+    @GetMapping
+    public ResponseEntity<List<Product>> findAll(){
+
+        List<Product> products = productRepository.findAll();
+
+        if(products != null && !products.isEmpty()){
+            return ResponseEntity.ok(products);
+        }
+
+        return ResponseEntity.notFound().build();
+    }
+
+
+    @PostMapping
+    public ResponseEntity<Product> createOne(@RequestBody @Valid Product product){
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                productRepository.save(product)
+        );
+    }
+
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleGenericException(Exception exception, HttpServletRequest request){
+
+        Map<String, String> apiError = new HashMap<>();
+        apiError.put("message",exception.getLocalizedMessage());
+        apiError.put("timestamp", new Date().toString());
+        apiError.put("url", request.getRequestURL().toString());
+        apiError.put("http-method", request.getMethod());
+
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+
+        if(exception instanceof AccessDeniedException){
+            status = HttpStatus.FORBIDDEN;
+        }
+
+        return ResponseEntity.status(status).body(apiError);
+    }
+
+}
+
+@PreAuthorize determina el acceso según las condiciones que requiere un endpoint protegido: rol, permisos, etc.
+
+
+
+
+

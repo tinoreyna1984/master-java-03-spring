@@ -1,0 +1,1400 @@
+Spring Boot - Dockerizar con base de datos
+******************************************
+(Docker y docker-compose)
+
+Para esto se tiene un app hecho en Spring Boot llamado notas-seguras con conexión a la BBDD MySQL notas-seguras.
+
+Configuración del Docker
+========================
+
+Verificar que en Usuarios/<Tu usuario>/AppData/Roaming/Docker/settings.json las propiedades estén colocadas de esta forma:
+
+"integratedWslDistros" : [ ]
+"enableIntegrationWithDefaultWslDistro" : false,
+
+Asimismo, en /Usuarios/<Tu usuario>/.docker/config.json debe estar:
+
+{
+  "credStore": "desktop"
+}
+
+"credStore" en lugar de "credsStore" (en caso aplique).
+
+
+Definir los archivos de Docker
+==============================
+
+Dockerfile
+----------
+
+FROM maven:3.8.3-openjdk-17
+
+WORKDIR /notas-seguras
+COPY . .
+RUN mvn clean install -DskipTests
+
+CMD mvn spring-boot:run
+
+Lo que contiene:
+
+- FROM es el compilador de Java empleado para la generación del build.
+- WORKDIR es el directorio de trabajo, en este caso es notas-seguras (raíz del proyecto).
+- COPY genera una copia de todos los elementos a la imagen creada.
+- RUN y CMD son ejecuciones de comandos requeridos para el build/install y la ejecución del servicio en el contenedor.
+
+Este archivo contiene la imagen que permitirá generar el contenedor que permitirá la disponibilidad de una aplicación Spring Boot.
+
+docker-compose.yml
+------------------
+
+version: '4.22'
+
+services:
+  mysqldb:
+    image: mysql:5.7
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=1
+      - MYSQL_ROOT_PASSWORD=$MYSQLDB_ROOT_PASSWORD
+      - MYSQL_DATABASE=$MYSQLDB_DATABASE
+    ports:
+      - $MYSQLDB_LOCAL_PORT:$MYSQLDB_DOCKER_PORT
+    volumes:
+      - db:/var/lib/mysql
+  app:
+    depends_on:
+      - mysqldb
+    build: .
+    restart: on-failure
+    env_file: ./.env
+    ports:
+      - $SPRING_LOCAL_PORT:$SPRING_DOCKER_PORT
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "spring.datasource.url"  : "jdbc:mysql://mysqldb:$MYSQLDB_DOCKER_PORT/$MYSQLDB_DATABASE?useSSL=false",
+        "spring.datasource.username" : "$MYSQLDB_USER",
+        "spring.datasource.password" : "$MYSQLDB_ROOT_PASSWORD",
+        "spring.jpa.hibernate.ddl-auto" : "create-drop"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
+
+volumes:
+  db:
+
+- MYSQL_ALLOW_EMPTY_PASSWORD=1 significa que puede usarse una clave vacía
+- notar que las variables con "$" provienen de un archivo .env en la raíz del proyecto.
+
+.env
+----
+
+MYSQLDB_USER=root
+MYSQLDB_ROOT_PASSWORD=
+MYSQLDB_DATABASE=notas-seguras
+MYSQLDB_LOCAL_PORT=3306
+MYSQLDB_DOCKER_PORT=3306
+
+SPRING_LOCAL_PORT=4002
+SPRING_DOCKER_PORT=4002
+
+Ejecución
+---------
+
+Ingresar: docker-compose up
+
+El resultado debe ser como el que sigue:
+
+PS E:\Java\IdeaProjects\notas-seguras> docker-compose up
+[+] Running 12/12
+ ✔ mysqldb 11 layers [⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿]      0B/0B      Pulled                                                                                                                                                                              97.9s
+   ✔ 70e9ff4420fb Pull complete                                                                                                                                                                                                        40.5s
+   ✔ 7ca4383b183f Pull complete                                                                                                                                                                                                         0.4s
+   ✔ 3e282e7651b1 Pull complete                                                                                                                                                                                                         1.1s
+   ✔ 1ffa0e0ca707 Pull complete                                                                                                                                                                                                         5.8s
+   ✔ 6eb790cf6382 Pull complete                                                                                                                                                                                                         3.6s
+   ✔ b4b277ff2929 Pull complete                                                                                                                                                                                                         6.5s
+   ✔ 692fe4469429 Pull complete                                                                                                                                                                                                        25.5s
+   ✔ c0d447d97bbd Pull complete                                                                                                                                                                                                         8.3s
+   ✔ 99ee594517ba Pull complete                                                                                                                                                                                                        54.4s
+   ✔ a9ae52de4d77 Pull complete                                                                                                                                                                                                        28.5s
+   ✔ 66cc05a182b5 Pull complete                                                                                                                                                                                                        29.3s
+[+] Building 147.6s (10/10) FINISHED                                                                                                                                                                                          docker:default
+ => [app internal] load build definition from Dockerfile                                                                                                                                                                                1.2s
+ => => transferring dockerfile: 162B                                                                                                                                                                                                    0.0s
+ => [app internal] load .dockerignore                                                                                                                                                                                                   0.8s
+ => => transferring context: 2B                                                                                                                                                                                                         0.1s
+ => [app internal] load metadata for docker.io/library/maven:3.8.3-openjdk-17                                                                                                                                                           2.4s
+ => [app auth] library/maven:pull token for registry-1.docker.io                                                                                                                                                                        0.0s
+ => [app 1/4] FROM docker.io/library/maven:3.8.3-openjdk-17@sha256:8a66581a077762c8752a9f64f73cdd8c59e9c4446eb810417119e0436b075931                                                                                                     0.0s
+ => [app internal] load build context                                                                                                                                                                                                   4.1s
+ => => transferring context: 10.97MB                                                                                                                                                                                                    3.4s
+ => CACHED [app 2/4] WORKDIR /notas-seguras                                                                                                                                                                                             0.0s
+ => [app 3/4] COPY . .                                                                                                                                                                                                                  7.8s
+ => [app 4/4] RUN mvn clean install -DskipTests                                                                                                                                                                                       123.1s
+ => [app] exporting to image                                                                                                                                                                                                            3.4s
+ => => exporting layers                                                                                                                                                                                                                 3.0s
+ => => writing image sha256:97aa42e71f719627b8a8b112784cf27be725604303877aef9c5c84b9659c5d0a                                                                                                                                            0.2s
+ => => naming to docker.io/library/notas-seguras-app                                                                                                                                                                                    0.2s
+[+] Running 3/3
+ ✔ Network notas-seguras_default      Created                                                                                                                                                                                           3.1s
+ ✔ Container notas-seguras-mysqldb-1  Created                                                                                                                                                                                           4.7s
+ ✔ Container notas-seguras-app-1      Created                                                                                                                                                                                           3.0s
+Attaching to notas-seguras-app-1, notas-seguras-mysqldb-1
+notas-seguras-mysqldb-1  | 2023-09-29 22:02:19+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 5.7.43-1.el7 started.
+notas-seguras-mysqldb-1  | 2023-09-29 22:02:20+00:00 [Note] [Entrypoint]: Switching to dedicated user 'mysql'
+notas-seguras-mysqldb-1  | 2023-09-29 22:02:20+00:00 [Note] [Entrypoint]: Entrypoint script for MySQL Server 5.7.43-1.el7 started.
+notas-seguras-mysqldb-1  | '/var/lib/mysql/mysql.sock' -> '/var/run/mysqld/mysqld.sock'
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.684744Z 0 [Warning] TIMESTAMP with implicit DEFAULT value is deprecated. Please use --explicit_defaults_for_timestamp server option (see documentation for more details).
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.686296Z 0 [Note] mysqld (mysqld 5.7.43) starting as process 1 ...
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690663Z 0 [Note] InnoDB: PUNCH HOLE support available
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690730Z 0 [Note] InnoDB: Mutexes and rw_locks use GCC atomic builtins
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690738Z 0 [Note] InnoDB: Uses event mutexes
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690743Z 0 [Note] InnoDB: GCC builtin __atomic_thread_fence() is used for memory barrier
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690748Z 0 [Note] InnoDB: Compressed tables use zlib 1.2.13
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.690757Z 0 [Note] InnoDB: Using Linux native AIO
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.691259Z 0 [Note] InnoDB: Number of pools: 1
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:20.691750Z 0 [Note] InnoDB: Using CPU crc32 instructions
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:21.104093Z 0 [Note] InnoDB: Initializing buffer pool, total size = 128M, instances = 1, chunk size = 128M
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:21.132232Z 0 [Note] InnoDB: Completed initialization of buffer pool
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:21.139893Z 0 [Note] InnoDB: If the mysqld execution user is authorized, page cleaner thread priority can be changed. See the man page of setpriority().
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:23.117640Z 0 [Note] InnoDB: Highest supported file format is Barracuda.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:24.886770Z 0 [Note] InnoDB: Creating shared tablespace for temporary tables
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:24.886883Z 0 [Note] InnoDB: Setting file './ibtmp1' size to 12 MB. Physically writing the file full; Please wait ...
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.056568Z 0 [Note] InnoDB: File './ibtmp1' size is now 12 MB.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.057715Z 0 [Note] InnoDB: 96 redo rollback segment(s) found. 96 redo rollback segment(s) are active.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.057759Z 0 [Note] InnoDB: 32 non-redo rollback segment(s) are active.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.059986Z 0 [Note] InnoDB: 5.7.43 started; log sequence number 12324101
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.061503Z 0 [Note] InnoDB: Loading buffer pool(s) from /var/lib/mysql/ib_buffer_pool
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.063400Z 0 [Note] Plugin 'FEDERATED' is disabled.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.849235Z 0 [Note] Found ca.pem, server-cert.pem and server-key.pem in data directory. Trying to enable SSL support using them.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.849285Z 0 [Note] Skipping generation of SSL certificates as certificate files are present in data directory.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.849297Z 0 [Warning] A deprecated TLS version TLSv1 is enabled. Please use TLSv1.2 or higher.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.849303Z 0 [Warning] A deprecated TLS version TLSv1.1 is enabled. Please use TLSv1.2 or higher.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.879487Z 0 [Warning] CA certificate ca.pem is self signed.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.879574Z 0 [Note] Skipping generation of RSA key pair as key files are present in data directory.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.880328Z 0 [Note] Server hostname (bind-address): '*'; port: 3306
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.880455Z 0 [Note] IPv6 is available.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.880514Z 0 [Note]   - '::' resolves to '::';
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:25.880570Z 0 [Note] Server socket created on IP: '::'.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:26.134847Z 0 [Warning] Insecure configuration for --pid-file: Location '/var/run/mysqld' in the path is accessible to all OS users. Consider choosing a different directory.
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:26.362855Z 0 [Note] InnoDB: Buffer pool(s) load completed at 230929 22:02:26
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:27.596647Z 0 [Note] Event Scheduler: Loaded 0 events
+notas-seguras-mysqldb-1  | 2023-09-29T22:02:27.597069Z 0 [Note] mysqld: ready for connections.
+notas-seguras-mysqldb-1  | Version: '5.7.43'  socket: '/var/run/mysqld/mysqld.sock'  port: 3306  MySQL Community Server (GPL)
+notas-seguras-app-1      | [INFO] Scanning for projects...
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/3.1.3/spring-boot-starter-parent-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-parent/3.1.3/spring-boot-starter-parent-3.1.3.pom (13 kB at 8.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/3.1.3/spring-boot-dependencies-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/3.1.3/spring-boot-dependencies-3.1.3.pom (94 kB at 273 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-bom/3.24.2/assertj-bom-3.24.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-bom/3.24.2/assertj-bom-3.24.2.pom (3.7 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/zipkin/brave/brave-bom/5.15.1/brave-bom-5.15.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/zipkin/brave/brave-bom/5.15.1/brave-bom-5.15.1.pom (12 kB at 63 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/zipkin/reporter2/zipkin-reporter-bom/2.16.3/zipkin-reporter-bom-2.16.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/zipkin/reporter2/zipkin-reporter-bom/2.16.3/zipkin-reporter-bom-2.16.3.pom (6.9 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/datastax/oss/java-driver-bom/4.15.0/java-driver-bom-4.15.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/datastax/oss/java-driver-bom/4.15.0/java-driver-bom-4.15.0.pom (4.1 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/dropwizard/metrics/metrics-bom/4.2.19/metrics-bom-4.2.19.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/dropwizard/metrics/metrics-bom/4.2.19/metrics-bom-4.2.19.pom (7.5 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/dropwizard/metrics/metrics-parent/4.2.19/metrics-parent-4.2.19.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/dropwizard/metrics/metrics-parent/4.2.19/metrics-parent-4.2.19.pom (20 kB at 70 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-bom/4.0.3/jaxb-bom-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-bom/4.0.3/jaxb-bom-4.0.3.pom (12 kB at 30 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.8/project-1.0.8.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.8/project-1.0.8.pom (15 kB at 39 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/groovy/groovy-bom/4.0.14/groovy-bom-4.0.14.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/groovy/groovy-bom/4.0.14/groovy-bom-4.0.14.pom (27 kB at 112 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/infinispan/infinispan-bom/14.0.14.Final/infinispan-bom-14.0.14.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/infinispan/infinispan-bom/14.0.14.Final/infinispan-bom-14.0.14.Final.pom (24 kB at 98 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/infinispan/infinispan-build-configuration-parent/14.0.14.Final/infinispan-build-configuration-parent-14.0.14.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/infinispan/infinispan-build-configuration-parent/14.0.14.Final/infinispan-build-configuration-parent-14.0.14.Final.pom (24 kB at 54 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/jboss-parent/39/jboss-parent-39.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/jboss-parent/39/jboss-parent-39.pom (68 kB at 235 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.15.2/jackson-bom-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.15.2/jackson-bom-2.15.2.pom (18 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-parent/2.15/jackson-parent-2.15.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-parent/2.15/jackson-parent-2.15.pom (6.5 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/50/oss-parent-50.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/50/oss-parent-50.pom (24 kB at 161 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jersey/jersey-bom/3.1.3/jersey-bom-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jersey/jersey-bom/3.1.3/jersey-bom-3.1.3.pom (19 kB at 80 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/jetty/jetty-bom/11.0.15/jetty-bom-11.0.15.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/jetty/jetty-bom/11.0.15/jetty-bom-11.0.15.pom (20 kB at 67 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.3/junit-bom-5.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.3/junit-bom-5.9.3.pom (5.6 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-bom/1.8.22/kotlin-bom-1.8.22.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-bom/1.8.22/kotlin-bom-1.8.22.pom (9.3 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-bom/1.6.4/kotlinx-coroutines-bom-1.6.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-bom/1.6.4/kotlinx-coroutines-bom-1.6.4.pom (4.3 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-bom/2.20.0/log4j-bom-2.20.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-bom/2.20.0/log4j-bom-2.20.0.pom (9.0 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/logging-parent/7/logging-parent-7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/logging-parent/7/logging-parent-7.pom (3.3 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/27/apache-27.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/27/apache-27.pom (20 kB at 113 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-bom/1.11.3/micrometer-bom-1.11.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-bom/1.11.3/micrometer-bom-1.11.3.pom (7.9 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-tracing-bom/1.1.4/micrometer-tracing-bom-1.1.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-tracing-bom/1.1.4/micrometer-tracing-bom-1.1.4.pom (4.6 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-bom/5.3.1/mockito-bom-5.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-bom/5.3.1/mockito-bom-5.3.1.pom (3.0 kB at 7.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/netty/netty-bom/4.1.97.Final/netty-bom-4.1.97.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/netty/netty-bom/4.1.97.Final/netty-bom-4.1.97.Final.pom (13 kB at 48 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/7/oss-parent-7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/7/oss-parent-7.pom (4.8 kB at 9.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-bom/4.10.0/okhttp-bom-4.10.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-bom/4.10.0/okhttp-bom-4.10.0.pom (3.1 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-bom/1.25.0/opentelemetry-bom-1.25.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-bom/1.25.0/opentelemetry-bom-1.25.0.pom (6.0 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/oracle/database/jdbc/ojdbc-bom/21.9.0.0/ojdbc-bom-21.9.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/oracle/database/jdbc/ojdbc-bom/21.9.0.0/ojdbc-bom-21.9.0.0.pom (13 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/prometheus/simpleclient_bom/0.16.0/simpleclient_bom-0.16.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/prometheus/simpleclient_bom/0.16.0/simpleclient_bom-0.16.0.pom (6.0 kB at 30 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/prometheus/parent/0.16.0/parent-0.16.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/prometheus/parent/0.16.0/parent-0.16.0.pom (13 kB at 39 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/querydsl/querydsl-bom/5.0.0/querydsl-bom-5.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/querydsl/querydsl-bom/5.0.0/querydsl-bom-5.0.0.pom (7.2 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/projectreactor/reactor-bom/2022.0.10/reactor-bom-2022.0.10.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/projectreactor/reactor-bom/2022.0.10/reactor-bom-2022.0.10.pom (4.8 kB at 23 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/rest-assured/rest-assured-bom/5.3.1/rest-assured-bom-5.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/rest-assured/rest-assured-bom/5.3.1/rest-assured-bom-5.3.1.pom (4.3 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/rsocket/rsocket-bom/1.1.3/rsocket-bom-1.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/rsocket/rsocket-bom/1.1.3/rsocket-bom-1.1.3.pom (2.6 kB at 8.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/seleniumhq/selenium/selenium-bom/4.8.3/selenium-bom-4.8.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/seleniumhq/selenium/selenium-bom/4.8.3/selenium-bom-4.8.3.pom (6.4 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/amqp/spring-amqp-bom/3.0.8/spring-amqp-bom-3.0.8.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/amqp/spring-amqp-bom/3.0.8/spring-amqp-bom-3.0.8.pom (3.4 kB at 7.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/batch/spring-batch-bom/5.0.3/spring-batch-bom-5.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/batch/spring-batch-bom/5.0.3/spring-batch-bom-5.0.3.pom (3.2 kB at 6.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-bom/2023.0.3/spring-data-bom-2023.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-bom/2023.0.3/spring-data-bom-2023.0.3.pom (5.5 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-framework-bom/6.0.11/spring-framework-bom-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-framework-bom/6.0.11/spring-framework-bom-6.0.11.pom (5.8 kB at 9.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/integration/spring-integration-bom/6.1.2/spring-integration-bom-6.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/integration/spring-integration-bom/6.1.2/spring-integration-bom-6.1.2.pom (9.9 kB at 25 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/restdocs/spring-restdocs-bom/3.0.0/spring-restdocs-bom-3.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/restdocs/spring-restdocs-bom/3.0.0/spring-restdocs-bom-3.0.0.pom (2.6 kB at 5.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-bom/6.1.3/spring-security-bom-6.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-bom/6.1.3/spring-security-bom-6.1.3.pom (5.3 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/session/spring-session-bom/3.1.2/spring-session-bom-3.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/session/spring-session-bom/3.1.2/spring-session-bom-3.1.2.pom (2.9 kB at 5.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/ws/spring-ws-bom/4.0.5/spring-ws-bom-4.0.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/ws/spring-ws-bom/4.0.5/spring-ws-bom-4.0.5.pom (3.5 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/testcontainers/testcontainers-bom/1.18.3/testcontainers-bom-1.18.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/testcontainers/testcontainers-bom/1.18.3/testcontainers-bom-1.18.3.pom (8.7 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/3.1.3/spring-boot-maven-plugin-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/3.1.3/spring-boot-maven-plugin-3.1.3.pom (3.4 kB at 7.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/3.1.3/spring-boot-maven-plugin-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-maven-plugin/3.1.3/spring-boot-maven-plugin-3.1.3.jar (131 kB at 539 kB/s)
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --------------------< com.aplicacion:notas-seguras >--------------------
+notas-seguras-app-1      | [INFO] Building notas-seguras 0.0.1-SNAPSHOT
+notas-seguras-app-1      | [INFO] --------------------------------[ jar ]---------------------------------
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/3.3.1/maven-resources-plugin-3.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/3.3.1/maven-resources-plugin-3.3.1.pom (8.2 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-plugins/39/maven-plugins-39.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-plugins/39/maven-plugins-39.pom (8.1 kB at 25 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/39/maven-parent-39.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/39/maven-parent-39.pom (48 kB at 98 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/29/apache-29.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/29/apache-29.pom (21 kB at 114 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/3.3.1/maven-resources-plugin-3.3.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-resources-plugin/3.3.1/maven-resources-plugin-3.3.1.jar (31 kB at 106 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/3.11.0/maven-compiler-plugin-3.11.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/3.11.0/maven-compiler-plugin-3.11.0.pom (9.8 kB at 27 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/3.11.0/maven-compiler-plugin-3.11.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-compiler-plugin/3.11.0/maven-compiler-plugin-3.11.0.jar (66 kB at 187 kB/s)
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] >>> spring-boot-maven-plugin:3.1.3:run (default-cli) > test-compile @ notas-seguras >>>
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-data-jpa/3.1.3/spring-boot-starter-data-jpa-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-data-jpa/3.1.3/spring-boot-starter-data-jpa-3.1.3.pom (2.9 kB at 7.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-aop/3.1.3/spring-boot-starter-aop-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-aop/3.1.3/spring-boot-starter-aop-3.1.3.pom (2.5 kB at 7.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter/3.1.3/spring-boot-starter-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter/3.1.3/spring-boot-starter-3.1.3.pom (3.0 kB at 10 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot/3.1.3/spring-boot-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot/3.1.3/spring-boot-3.1.3.pom (2.2 kB at 7.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-core/6.0.11/spring-core-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-core/6.0.11/spring-core-6.0.11.pom (2.0 kB at 4.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jcl/6.0.11/spring-jcl-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jcl/6.0.11/spring-jcl-6.0.11.pom (1.8 kB at 9.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-context/6.0.11/spring-context-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-context/6.0.11/spring-context-6.0.11.pom (2.6 kB at 8.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aop/6.0.11/spring-aop-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aop/6.0.11/spring-aop-6.0.11.pom (2.2 kB at 10 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-beans/6.0.11/spring-beans-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-beans/6.0.11/spring-beans-6.0.11.pom (2.0 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-expression/6.0.11/spring-expression-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-expression/6.0.11/spring-expression-6.0.11.pom (2.1 kB at 5.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-autoconfigure/3.1.3/spring-boot-autoconfigure-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-autoconfigure/3.1.3/spring-boot-autoconfigure-3.1.3.pom (2.1 kB at 5.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-logging/3.1.3/spring-boot-starter-logging-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-logging/3.1.3/spring-boot-starter-logging-3.1.3.pom (2.5 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.4.11/logback-classic-1.4.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.4.11/logback-classic-1.4.11.pom (13 kB at 47 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-parent/1.4.11/logback-parent-1.4.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-parent/1.4.11/logback-parent-1.4.11.pom (20 kB at 30 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.4.11/logback-core-1.4.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.4.11/logback-core-1.4.11.pom (5.0 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.7/slf4j-api-2.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.7/slf4j-api-2.0.7.pom (2.7 kB at 7.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/2.0.7/slf4j-parent-2.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/2.0.7/slf4j-parent-2.0.7.pom (17 kB at 55 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-to-slf4j/2.20.0/log4j-to-slf4j-2.20.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-to-slf4j/2.20.0/log4j-to-slf4j-2.20.0.pom (3.7 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j/2.20.0/log4j-2.20.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j/2.20.0/log4j-2.20.0.pom (67 kB at 177 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/groovy/groovy-bom/3.0.14/groovy-bom-3.0.14.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/groovy/groovy-bom/3.0.14/groovy-bom-3.0.14.pom (26 kB at 76 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.1/jackson-bom-2.14.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.1/jackson-bom-2.14.1.pom (17 kB at 41 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-parent/2.14/jackson-parent-2.14.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-parent/2.14/jackson-parent-2.14.pom (7.7 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/48/oss-parent-48.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/48/oss-parent-48.pom (24 kB at 75 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/platform/jakarta.jakartaee-bom/9.0.0/jakarta.jakartaee-bom-9.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/platform/jakarta.jakartaee-bom/9.0.0/jakarta.jakartaee-bom-9.0.0.pom (9.6 kB at 23 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/platform/jakartaee-api-parent/9.0.0/jakartaee-api-parent-9.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/platform/jakartaee-api-parent/9.0.0/jakartaee-api-parent-9.0.0.pom (15 kB at 77 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.6/project-1.0.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.6/project-1.0.6.pom (13 kB at 26 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/jetty/jetty-bom/9.4.50.v20221201/jetty-bom-9.4.50.v20221201.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/jetty/jetty-bom/9.4.50.v20221201/jetty-bom-9.4.50.v20221201.pom (18 kB at 79 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.1/junit-bom-5.9.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.1/junit-bom-5.9.1.pom (5.6 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/fabric8/kubernetes-client-bom/5.12.2/kubernetes-client-bom-5.12.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/fabric8/kubernetes-client-bom/5.12.2/kubernetes-client-bom-5.12.2.pom (26 kB at 100 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/netty/netty-bom/4.1.86.Final/netty-bom-4.1.86.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/netty/netty-bom/4.1.86.Final/netty-bom-4.1.86.Final.pom (13 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-framework-bom/5.3.24/spring-framework-bom-5.3.24.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-framework-bom/5.3.24/spring-framework-bom-5.3.24.pom (5.7 kB at 23 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.20.0/log4j-api-2.20.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.20.0/log4j-api-2.20.0.pom (6.3 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/jul-to-slf4j/2.0.7/jul-to-slf4j-2.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/jul-to-slf4j/2.0.7/jul-to-slf4j-2.0.7.pom (954 B at 3.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.pom (16 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.7/project-1.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/ee4j/project/1.0.7/project-1.0.7.pom (14 kB at 30 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/yaml/snakeyaml/1.33/snakeyaml-1.33.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/yaml/snakeyaml/1.33/snakeyaml-1.33.pom (39 kB at 116 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.20/aspectjweaver-1.9.20.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.20/aspectjweaver-1.9.20.pom (2.1 kB at 4.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-jdbc/3.1.3/spring-boot-starter-jdbc-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-jdbc/3.1.3/spring-boot-starter-jdbc-3.1.3.pom (2.5 kB at 7.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/zaxxer/HikariCP/5.0.1/HikariCP-5.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/zaxxer/HikariCP/5.0.1/HikariCP-5.0.1.pom (25 kB at 56 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/9/oss-parent-9.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/oss/oss-parent/9/oss-parent-9.pom (6.6 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jdbc/6.0.11/spring-jdbc-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jdbc/6.0.11/spring-jdbc-6.0.11.pom (2.4 kB at 3.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-tx/6.0.11/spring-tx-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-tx/6.0.11/spring-tx-6.0.11.pom (2.2 kB at 8.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/orm/hibernate-core/6.2.7.Final/hibernate-core-6.2.7.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/orm/hibernate-core/6.2.7.Final/hibernate-core-6.2.7.Final.pom (5.8 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/persistence/jakarta.persistence-api/3.1.0/jakarta.persistence-api-3.1.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/persistence/jakarta.persistence-api/3.1.0/jakarta.persistence-api-3.1.0.pom (16 kB at 48 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/transaction/jakarta.transaction-api/2.0.1/jakarta.transaction-api-2.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/transaction/jakarta.transaction-api/2.0.1/jakarta.transaction-api-2.0.1.pom (14 kB at 48 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.pom (19 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/logging-parent/1.0.1.Final/logging-parent-1.0.1.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/logging-parent/1.0.1.Final/logging-parent-1.0.1.Final.pom (6.0 kB at 9.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/common/hibernate-commons-annotations/6.0.6.Final/hibernate-commons-annotations-6.0.6.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/common/hibernate-commons-annotations/6.0.6.Final/hibernate-commons-annotations-6.0.6.Final.pom (2.1 kB at 4.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex/3.0.5/jandex-3.0.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex/3.0.5/jandex-3.0.5.pom (6.9 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex-parent/3.0.5/jandex-parent-3.0.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex-parent/3.0.5/jandex-parent-3.0.5.pom (5.9 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/smallrye/smallrye-build-parent/31/smallrye-build-parent-31.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/smallrye/smallrye-build-parent/31/smallrye-build-parent-31.pom (52 kB at 119 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.5.1/classmate-1.5.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.5.1/classmate-1.5.1.pom (7.3 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/35/oss-parent-35.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/oss-parent/35/oss-parent-35.pom (23 kB at 72 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.6/byte-buddy-1.14.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.6/byte-buddy-1.14.6.pom (16 kB at 41 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-parent/1.14.6/byte-buddy-parent-1.14.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-parent/1.14.6/byte-buddy-parent-1.14.6.pom (58 kB at 147 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api/4.0.0/jakarta.xml.bind-api-4.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api/4.0.0/jakarta.xml.bind-api-4.0.0.pom (12 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api-parent/4.0.0/jakarta.xml.bind-api-parent-4.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api-parent/4.0.0/jakarta.xml.bind-api-parent-4.0.0.pom (9.2 kB at 37 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/activation/jakarta.activation-api/2.1.2/jakarta.activation-api-2.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/activation/jakarta.activation-api/2.1.2/jakarta.activation-api-2.1.2.pom (18 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.3/jaxb-runtime-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.3/jaxb-runtime-4.0.3.pom (10 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-runtime-parent/4.0.3/jaxb-runtime-parent-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-runtime-parent/4.0.3/jaxb-runtime-parent-4.0.3.pom (1.2 kB at 1.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-parent/4.0.3/jaxb-parent-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-parent/4.0.3/jaxb-parent-4.0.3.pom (35 kB at 55 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/jaxb-bom-ext/4.0.3/jaxb-bom-ext-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/jaxb-bom-ext/4.0.3/jaxb-bom-ext-4.0.3.pom (3.5 kB at 6.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.3/jaxb-core-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.3/jaxb-core-4.0.3.pom (3.7 kB at 8.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.1/angus-activation-2.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.1/angus-activation-2.0.1.pom (4.0 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation-project/2.0.1/angus-activation-project-2.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation-project/2.0.1/angus-activation-project-2.0.1.pom (20 kB at 40 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.3/txw2-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.3/txw2-4.0.3.pom (1.8 kB at 5.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-txw-parent/4.0.3/jaxb-txw-parent-4.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-txw-parent/4.0.3/jaxb-txw-parent-4.0.3.pom (1.2 kB at 4.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.pom (1.6 kB at 4.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons/4.1.2/istack-commons-4.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons/4.1.2/istack-commons-4.1.2.pom (26 kB at 92 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.pom (5.9 kB at 7.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.10.1/antlr4-runtime-4.10.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.10.1/antlr4-runtime-4.10.1.pom (3.5 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-master/4.10.1/antlr4-master-4.10.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-master/4.10.1/antlr4-master-4.10.1.pom (4.4 kB at 25 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa/3.1.3/spring-data-jpa-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa/3.1.3/spring-data-jpa-3.1.3.pom (12 kB at 46 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa-parent/3.1.3/spring-data-jpa-parent-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa-parent/3.1.3/spring-data-jpa-parent-3.1.3.pom (6.5 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/build/spring-data-parent/3.1.3/spring-data-parent-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/build/spring-data-parent/3.1.3/spring-data-parent-3.1.3.pom (39 kB at 124 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/build/spring-data-build/3.1.3/spring-data-build-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/build/spring-data-build/3.1.3/spring-data-build-3.1.3.pom (7.3 kB at 23 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-bom/1.10.10/micrometer-bom-1.10.10.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-bom/1.10.10/micrometer-bom-1.10.10.pom (7.8 kB at 37 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-tracing-bom/1.0.9/micrometer-tracing-bom-1.0.9.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-tracing-bom/1.0.9/micrometer-tracing-bom-1.0.9.pom (4.6 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-commons/3.1.3/spring-data-commons-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-commons/3.1.3/spring-data-commons-3.1.3.pom (9.5 kB at 30 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-orm/6.0.11/spring-orm-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-orm/6.0.11/spring-orm-6.0.11.pom (2.6 kB at 8.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aspects/6.0.11/spring-aspects-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aspects/6.0.11/spring-aspects-6.0.11.pom (2.0 kB at 8.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-validation/3.1.3/spring-boot-starter-validation-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-validation/3.1.3/spring-boot-starter-validation-3.1.3.pom (2.5 kB at 8.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-el/10.1.12/tomcat-embed-el-10.1.12.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-el/10.1.12/tomcat-embed-el-10.1.12.pom (1.5 kB at 5.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator/8.0.1.Final/hibernate-validator-8.0.1.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator/8.0.1.Final/hibernate-validator-8.0.1.Final.pom (15 kB at 34 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator-parent/8.0.1.Final/hibernate-validator-parent-8.0.1.Final.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator-parent/8.0.1.Final/hibernate-validator-parent-8.0.1.Final.pom (81 kB at 60 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/arquillian/arquillian-bom/1.7.0.Alpha10/arquillian-bom-1.7.0.Alpha10.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/arquillian/arquillian-bom/1.7.0.Alpha10/arquillian-bom-1.7.0.Alpha10.pom (10 kB at 7.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/shrinkwrap-bom/1.2.6/shrinkwrap-bom-1.2.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/shrinkwrap-bom/1.2.6/shrinkwrap-bom-1.2.6.pom (4.0 kB at 5.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/resolver/shrinkwrap-resolver-bom/3.1.4/shrinkwrap-resolver-bom-3.1.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/resolver/shrinkwrap-resolver-bom/3.1.4/shrinkwrap-resolver-bom-3.1.4.pom (7.0 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.6.3/maven-3.6.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.6.3/maven-3.6.3.pom (26 kB at 81 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/33/maven-parent-33.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/33/maven-parent-33.pom (44 kB at 164 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/21/apache-21.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/21/apache-21.pom (17 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/descriptors/shrinkwrap-descriptors-bom/2.0.0/shrinkwrap-descriptors-bom-2.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/shrinkwrap/descriptors/shrinkwrap-descriptors-bom/2.0.0/shrinkwrap-descriptors-bom-2.0.0.pom (5.2 kB at 5.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/validation/jakarta.validation-api/3.0.2/jakarta.validation-api-3.0.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/validation/jakarta.validation-api/3.0.2/jakarta.validation-api-3.0.2.pom (11 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-web/3.1.3/spring-boot-starter-web-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-web/3.1.3/spring-boot-starter-web-3.1.3.pom (2.9 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-json/3.1.3/spring-boot-starter-json-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-json/3.1.3/spring-boot-starter-json-3.1.3.pom (3.1 kB at 5.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-web/6.0.11/spring-web-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-web/6.0.11/spring-web-6.0.11.pom (2.4 kB at 3.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-observation/1.11.3/micrometer-observation-1.11.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-observation/1.11.3/micrometer-observation-1.11.3.pom (3.9 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-commons/1.11.3/micrometer-commons-1.11.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-commons/1.11.3/micrometer-commons-1.11.3.pom (3.4 kB at 3.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.2/jackson-databind-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.2/jackson-databind-2.15.2.pom (19 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.15.2/jackson-base-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.15.2/jackson-base-2.15.2.pom (11 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.2/junit-bom-5.9.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.9.2/junit-bom-5.9.2.pom (5.6 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.2/jackson-annotations-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.2/jackson-annotations-2.15.2.pom (7.1 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.2/jackson-core-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.2/jackson-core-2.15.2.pom (9.8 kB at 6.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.15.2/jackson-datatype-jdk8-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.15.2/jackson-datatype-jdk8-2.15.2.pom (2.6 kB at 2.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.15.2/jackson-modules-java8-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.15.2/jackson-modules-java8-2.15.2.pom (3.1 kB at 2.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.15.2/jackson-datatype-jsr310-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.15.2/jackson-datatype-jsr310-2.15.2.pom (4.9 kB at 5.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.15.2/jackson-module-parameter-names-2.15.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.15.2/jackson-module-parameter-names-2.15.2.pom (4.4 kB at 5.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-tomcat/3.1.3/spring-boot-starter-tomcat-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-tomcat/3.1.3/spring-boot-starter-tomcat-3.1.3.pom (3.1 kB at 2.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/10.1.12/tomcat-embed-core-10.1.12.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/10.1.12/tomcat-embed-core-10.1.12.pom (1.8 kB at 1.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.12/tomcat-embed-websocket-10.1.12.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.12/tomcat-embed-websocket-10.1.12.pom (1.8 kB at 2.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-webmvc/6.0.11/spring-webmvc-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-webmvc/6.0.11/spring-webmvc-6.0.11.pom (3.0 kB at 6.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-security/3.1.3/spring-boot-starter-security-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-security/3.1.3/spring-boot-starter-security-3.1.3.pom (2.7 kB at 4.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-config/6.1.3/spring-security-config-6.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-config/6.1.3/spring-security-config-6.1.3.pom (2.8 kB at 8.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-core/6.1.3/spring-security-core-6.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-core/6.1.3/spring-security-core-6.1.3.pom (3.2 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-crypto/6.1.3/spring-security-crypto-6.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-crypto/6.1.3/spring-security-crypto-6.1.3.pom (1.9 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-web/6.1.3/spring-security-web-6.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-web/6.1.3/spring-security-web-6.1.3.pom (3.2 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-api/0.11.5/jjwt-api-0.11.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-api/0.11.5/jjwt-api-0.11.5.pom (1.8 kB at 6.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-root/0.11.5/jjwt-root-0.11.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-root/0.11.5/jjwt-root-0.11.5.pom (29 kB at 59 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-impl/0.11.5/jjwt-impl-0.11.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-impl/0.11.5/jjwt-impl-0.11.5.pom (2.3 kB at 9.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-jackson/0.11.5/jjwt-jackson-0.11.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-jackson/0.11.5/jjwt-jackson-0.11.5.pom (3.3 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-devtools/3.1.3/spring-boot-devtools-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-devtools/3.1.3/spring-boot-devtools-3.1.3.pom (2.3 kB at 4.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.pom (3.2 kB at 5.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.28/lombok-1.18.28.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.28/lombok-1.18.28.pom (1.5 kB at 6.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-test/3.1.3/spring-boot-starter-test-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-test/3.1.3/spring-boot-starter-test-3.1.3.pom (4.9 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test/3.1.3/spring-boot-test-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test/3.1.3/spring-boot-test-3.1.3.pom (2.0 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test-autoconfigure/3.1.3/spring-boot-test-autoconfigure-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test-autoconfigure/3.1.3/spring-boot-test-autoconfigure-3.1.3.pom (2.5 kB at 7.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/jayway/jsonpath/json-path/2.8.0/json-path-2.8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/jayway/jsonpath/json-path/2.8.0/json-path-2.8.0.pom (1.9 kB at 3.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/minidev/json-smart/2.4.11/json-smart-2.4.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/minidev/json-smart/2.4.11/json-smart-2.4.11.pom (9.2 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/minidev/accessors-smart/2.4.11/accessors-smart-2.4.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/minidev/accessors-smart/2.4.11/accessors-smart-2.4.11.pom (11 kB at 38 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.3/asm-9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.3/asm-9.3.pom (2.4 kB at 7.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/ow2/1.5/ow2-1.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/ow2/1.5/ow2-1.5.pom (11 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-core/3.24.2/assertj-core-3.24.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-core/3.24.2/assertj-core-3.24.2.pom (19 kB at 62 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-parent/3.24.2/assertj-parent-3.24.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-parent/3.24.2/assertj-parent-3.24.2.pom (13 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-build/3.24.2/assertj-build-3.24.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-build/3.24.2/assertj-build-3.24.2.pom (8.8 kB at 26 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-bom/4.11.0/mockito-bom-4.11.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-bom/4.11.0/mockito-bom-4.11.0.pom (3.2 kB at 6.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest/2.2/hamcrest-2.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest/2.2/hamcrest-2.2.pom (1.1 kB at 2.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter/5.9.3/junit-jupiter-5.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter/5.9.3/junit-jupiter-5.9.3.pom (3.2 kB at 7.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.pom (3.2 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.pom (1.7 kB at 5.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.pom (2.8 kB at 6.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.pom (1.5 kB at 1.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-params/5.9.3/junit-jupiter-params-5.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-params/5.9.3/junit-jupiter-params-5.9.3.pom (3.0 kB at 2.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.pom (3.2 kB at 3.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.pom (3.2 kB at 10 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-core/5.3.1/mockito-core-5.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-core/5.3.1/mockito-core-5.3.1.pom (2.5 kB at 2.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.6/byte-buddy-agent-1.14.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.6/byte-buddy-agent-1.14.6.pom (10 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis/3.3/objenesis-3.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis/3.3/objenesis-3.3.pom (3.0 kB at 5.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis-parent/3.3/objenesis-parent-3.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis-parent/3.3/objenesis-parent-3.3.pom (19 kB at 77 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-junit-jupiter/5.3.1/mockito-junit-jupiter-5.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-junit-jupiter/5.3.1/mockito-junit-jupiter-5.3.1.pom (2.3 kB at 9.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/skyscreamer/jsonassert/1.5.1/jsonassert-1.5.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/skyscreamer/jsonassert/1.5.1/jsonassert-1.5.1.pom (5.2 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.pom (2.8 kB at 4.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-test/6.0.11/spring-test-6.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-test/6.0.11/spring-test-6.0.11.pom (2.1 kB at 5.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-core/2.9.1/xmlunit-core-2.9.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-core/2.9.1/xmlunit-core-2.9.1.pom (2.4 kB at 6.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-parent/2.9.1/xmlunit-parent-2.9.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-parent/2.9.1/xmlunit-parent-2.9.1.pom (21 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-data-jpa/3.1.3/spring-boot-starter-data-jpa-3.1.3.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-aop/3.1.3/spring-boot-starter-aop-3.1.3.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.20/aspectjweaver-1.9.20.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-jdbc/3.1.3/spring-boot-starter-jdbc-3.1.3.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/zaxxer/HikariCP/5.0.1/HikariCP-5.0.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/zaxxer/HikariCP/5.0.1/HikariCP-5.0.1.jar (162 kB at 131 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jdbc/6.0.11/spring-jdbc-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-data-jpa/3.1.3/spring-boot-starter-data-jpa-3.1.3.jar (4.8 kB at 3.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/orm/hibernate-core/6.2.7.Final/hibernate-core-6.2.7.Final.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-jdbc/3.1.3/spring-boot-starter-jdbc-3.1.3.jar (4.8 kB at 3.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/persistence/jakarta.persistence-api/3.1.0/jakarta.persistence-api-3.1.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-aop/3.1.3/spring-boot-starter-aop-3.1.3.jar (4.8 kB at 3.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/transaction/jakarta.transaction-api/2.0.1/jakarta.transaction-api-2.0.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.20/aspectjweaver-1.9.20.jar (2.1 MB at 1.3 MB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.jar (59 kB at 28 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/common/hibernate-commons-annotations/6.0.6.Final/hibernate-commons-annotations-6.0.6.Final.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/persistence/jakarta.persistence-api/3.1.0/jakarta.persistence-api-3.1.0.jar (165 kB at 78 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex/3.0.5/jandex-3.0.5.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/transaction/jakarta.transaction-api/2.0.1/jakarta.transaction-api-2.0.1.jar (29 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.5.1/classmate-1.5.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jdbc/6.0.11/spring-jdbc-6.0.11.jar (431 kB at 166 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.6/byte-buddy-1.14.6.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/common/hibernate-commons-annotations/6.0.6.Final/hibernate-commons-annotations-6.0.6.Final.jar (68 kB at 26 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.3/jaxb-runtime-4.0.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/io/smallrye/jandex/3.0.5/jandex-3.0.5.jar (293 kB at 110 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.3/jaxb-core-4.0.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.5.1/classmate-1.5.1.jar (68 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.1/angus-activation-2.0.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.1/angus-activation-2.0.1.jar (27 kB at 8.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.3/txw2-4.0.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.3/jaxb-core-4.0.3.jar (139 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.jar (26 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.3/txw2-4.0.3.jar (73 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.10.1/antlr4-runtime-4.10.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.jar (11 kB at 2.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa/3.1.3/spring-data-jpa-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.10.1/antlr4-runtime-4.10.1.jar (322 kB at 61 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-commons/3.1.3/spring-data-commons-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.3/jaxb-runtime-4.0.3.jar (920 kB at 129 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-orm/6.0.11/spring-orm-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-commons/3.1.3/spring-data-commons-3.1.3.jar (1.4 MB at 193 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-context/6.0.11/spring-context-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-orm/6.0.11/spring-orm-6.0.11.jar (229 kB at 26 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-tx/6.0.11/spring-tx-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/data/spring-data-jpa/3.1.3/spring-data-jpa-3.1.3.jar (1.1 MB at 119 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-beans/6.0.11/spring-beans-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-context/6.0.11/spring-context-6.0.11.jar (1.2 MB at 124 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-tx/6.0.11/spring-tx-6.0.11.jar (271 kB at 28 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.7/slf4j-api-2.0.7.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/2.1.1/jakarta.annotation-api-2.1.1.jar (26 kB at 2.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aspects/6.0.11/spring-aspects-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aspects/6.0.11/spring-aspects-6.0.11.jar (50 kB at 4.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-validation/3.1.3/spring-boot-starter-validation-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.7/slf4j-api-2.0.7.jar (64 kB at 5.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter/3.1.3/spring-boot-starter-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter/3.1.3/spring-boot-starter-3.1.3.jar (4.8 kB at 418 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-logging/3.1.3/spring-boot-starter-logging-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-validation/3.1.3/spring-boot-starter-validation-3.1.3.jar (4.8 kB at 417 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.4.11/logback-classic-1.4.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-logging/3.1.3/spring-boot-starter-logging-3.1.3.jar (4.8 kB at 382 B/s)
+Downloading from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.4.11/logback-core-1.4.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-beans/6.0.11/spring-beans-6.0.11.jar (855 kB at 69 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-to-slf4j/2.20.0/log4j-to-slf4j-2.20.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.4.11/logback-classic-1.4.11.jar (283 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.20.0/log4j-api-2.20.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-to-slf4j/2.20.0/log4j-to-slf4j-2.20.0.jar (22 kB at 1.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/jul-to-slf4j/2.0.7/jul-to-slf4j-2.0.7.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.4.11/logback-core-1.4.11.jar (598 kB at 39 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/yaml/snakeyaml/1.33/snakeyaml-1.33.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/jul-to-slf4j/2.0.7/jul-to-slf4j-2.0.7.jar (5.7 kB at 363 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-el/10.1.12/tomcat-embed-el-10.1.12.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.20.0/log4j-api-2.20.0.jar (313 kB at 20 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator/8.0.1.Final/hibernate-validator-8.0.1.Final.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.6/byte-buddy-1.14.6.jar (4.2 MB at 270 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/validation/jakarta.validation-api/3.0.2/jakarta.validation-api-3.0.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-el/10.1.12/tomcat-embed-el-10.1.12.jar (261 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-web/3.1.3/spring-boot-starter-web-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/validation/jakarta.validation-api/3.0.2/jakarta.validation-api-3.0.2.jar (93 kB at 5.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-json/3.1.3/spring-boot-starter-json-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/yaml/snakeyaml/1.33/snakeyaml-1.33.jar (332 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.15.2/jackson-datatype-jdk8-2.15.2.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-web/3.1.3/spring-boot-starter-web-3.1.3.jar (4.8 kB at 276 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.15.2/jackson-datatype-jsr310-2.15.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-json/3.1.3/spring-boot-starter-json-3.1.3.jar (4.7 kB at 255 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.15.2/jackson-module-parameter-names-2.15.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/orm/hibernate-core/6.2.7.Final/hibernate-core-6.2.7.Final.jar (11 MB at 588 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-tomcat/3.1.3/spring-boot-starter-tomcat-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jdk8/2.15.2/jackson-datatype-jdk8-2.15.2.jar (36 kB at 1.9 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/10.1.12/tomcat-embed-core-10.1.12.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.15.2/jackson-datatype-jsr310-2.15.2.jar (123 kB at 6.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.12/tomcat-embed-websocket-10.1.12.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hibernate/validator/hibernate-validator/8.0.1.Final/hibernate-validator-8.0.1.Final.jar (1.3 MB at 69 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-web/6.0.11/spring-web-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.15.2/jackson-module-parameter-names-2.15.2.jar (10 kB at 525 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-observation/1.11.3/micrometer-observation-1.11.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-tomcat/3.1.3/spring-boot-starter-tomcat-3.1.3.jar (4.8 kB at 238 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-commons/1.11.3/micrometer-commons-1.11.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-websocket/10.1.12/tomcat-embed-websocket-10.1.12.jar (281 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-webmvc/6.0.11/spring-webmvc-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-observation/1.11.3/micrometer-observation-1.11.3.jar (71 kB at 3.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-expression/6.0.11/spring-expression-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/io/micrometer/micrometer-commons/1.11.3/micrometer-commons-1.11.3.jar (47 kB at 2.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-security/3.1.3/spring-boot-starter-security-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-security/3.1.3/spring-boot-starter-security-3.1.3.jar (4.7 kB at 206 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aop/6.0.11/spring-aop-6.0.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-webmvc/6.0.11/spring-webmvc-6.0.11.jar (1.0 MB at 44 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-config/6.1.3/spring-security-config-6.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-web/6.0.11/spring-web-6.0.11.jar (1.8 MB at 74 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-core/6.1.3/spring-security-core-6.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-expression/6.0.11/spring-expression-6.0.11.jar (296 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-crypto/6.1.3/spring-security-crypto-6.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/10.1.12/tomcat-embed-core-10.1.12.jar (3.5 MB at 148 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-web/6.1.3/spring-security-web-6.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-aop/6.0.11/spring-aop-6.0.11.jar (405 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-api/0.11.5/jjwt-api-0.11.5.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-crypto/6.1.3/spring-security-crypto-6.1.3.jar (84 kB at 3.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-impl/0.11.5/jjwt-impl-0.11.5.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-api/0.11.5/jjwt-api-0.11.5.jar (77 kB at 2.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-jackson/0.11.5/jjwt-jackson-0.11.5.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-core/6.1.3/spring-security-core-6.1.3.jar (509 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-devtools/3.1.3/spring-boot-devtools-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-web/6.1.3/spring-security-web-6.1.3.jar (771 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot/3.1.3/spring-boot-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/security/spring-security-config/6.1.3/spring-security-config-6.1.3.jar (1.7 MB at 62 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-autoconfigure/3.1.3/spring-boot-autoconfigure-3.1.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-jackson/0.11.5/jjwt-jackson-0.11.5.jar (8.2 kB at 302 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-devtools/3.1.3/spring-boot-devtools-3.1.3.jar (203 kB at 7.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.28/lombok-1.18.28.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/io/jsonwebtoken/jjwt-impl/0.11.5/jjwt-impl-0.11.5.jar (81 kB at 2.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.2/jackson-core-2.15.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot/3.1.3/spring-boot-3.1.3.jar (1.5 MB at 54 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.2/jackson-databind-2.15.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-autoconfigure/3.1.3/spring-boot-autoconfigure-3.1.3.jar (1.8 MB at 58 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.2/jackson-annotations-2.15.2.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.15.2/jackson-core-2.15.2.jar (549 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-test/3.1.3/spring-boot-starter-test-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/projectlombok/lombok/1.18.28/lombok-1.18.28.jar (2.0 MB at 64 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test/3.1.3/spring-boot-test-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.2/jackson-databind-2.15.2.jar (1.6 MB at 52 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test-autoconfigure/3.1.3/spring-boot-test-autoconfigure-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar (2.5 MB at 80 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/jayway/jsonpath/json-path/2.8.0/json-path-2.8.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-starter-test/3.1.3/spring-boot-starter-test-3.1.3.jar (4.8 kB at 149 B/s)
+Downloading from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api/4.0.0/jakarta.xml.bind-api-4.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.15.2/jackson-annotations-2.15.2.jar (76 kB at 2.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/jakarta/activation/jakarta.activation-api/2.1.2/jakarta.activation-api-2.1.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test-autoconfigure/3.1.3/spring-boot-test-autoconfigure-3.1.3.jar (223 kB at 6.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/minidev/json-smart/2.4.11/json-smart-2.4.11.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-test/3.1.3/spring-boot-test-3.1.3.jar (248 kB at 7.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/minidev/accessors-smart/2.4.11/accessors-smart-2.4.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/jayway/jsonpath/json-path/2.8.0/json-path-2.8.0.jar (278 kB at 8.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.3/asm-9.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/activation/jakarta.activation-api/2.1.2/jakarta.activation-api-2.1.2.jar (66 kB at 2.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-core/3.24.2/assertj-core-3.24.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/jakarta/xml/bind/jakarta.xml.bind-api/4.0.0/jakarta.xml.bind-api-4.0.0.jar (127 kB at 3.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest/2.2/hamcrest-2.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/net/minidev/accessors-smart/2.4.11/accessors-smart-2.4.11.jar (30 kB at 909 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter/5.9.3/junit-jupiter-5.9.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/net/minidev/json-smart/2.4.11/json-smart-2.4.11.jar (120 kB at 3.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.3/asm-9.3.jar (122 kB at 3.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/opentest4j/opentest4j/1.2.0/opentest4j-1.2.0.jar (7.7 kB at 222 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/assertj/assertj-core/3.24.2/assertj-core-3.24.2.jar (1.3 MB at 39 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/hamcrest/hamcrest/2.2/hamcrest-2.2.jar (123 kB at 3.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-params/5.9.3/junit-jupiter-params-5.9.3.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-commons/1.9.3/junit-platform-commons-1.9.3.jar (103 kB at 2.9 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter/5.9.3/junit-jupiter-5.9.3.jar (6.4 kB at 176 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar (6.8 kB at 188 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-core/5.3.1/mockito-core-5.3.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-params/5.9.3/junit-jupiter-params-5.9.3.jar (580 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.6/byte-buddy-agent-1.14.6.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-engine/1.9.3/junit-platform-engine-1.9.3.jar (189 kB at 4.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis/3.3/objenesis-3.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-engine/5.9.3/junit-jupiter-engine-5.9.3.jar (247 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-junit-jupiter/5.3.1/mockito-junit-jupiter-5.3.1.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/jupiter/junit-jupiter-api/5.9.3/junit-jupiter-api-5.9.3.jar (208 kB at 5.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/skyscreamer/jsonassert/1.5.1/jsonassert-1.5.1.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-core/5.3.1/mockito-core-5.3.1.jar (689 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/objenesis/objenesis/3.3/objenesis-3.3.jar (49 kB at 1.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-core/6.0.11/spring-core-6.0.11.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.6/byte-buddy-agent-1.14.6.jar (257 kB at 5.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jcl/6.0.11/spring-jcl-6.0.11.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar (18 kB at 378 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/spring-test/6.0.11/spring-test-6.0.11.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/skyscreamer/jsonassert/1.5.1/jsonassert-1.5.1.jar (31 kB at 633 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-core/2.9.1/xmlunit-core-2.9.1.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/mockito/mockito-junit-jupiter/5.3.1/mockito-junit-jupiter-5.3.1.jar (5.5 kB at 113 B/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/xmlunit/xmlunit-core/2.9.1/xmlunit-core-2.9.1.jar (175 kB at 3.6 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-jcl/6.0.11/spring-jcl-6.0.11.jar (24 kB at 494 B/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-test/6.0.11/spring-test-6.0.11.jar (830 kB at 17 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/spring-core/6.0.11/spring-core-6.0.11.jar (1.8 MB at 36 kB/s)
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ notas-seguras ---
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.26/plexus-interpolation-1.26.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.26/plexus-interpolation-1.26.pom (2.7 kB at 4.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/5.1/plexus-5.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/5.1/plexus-5.1.pom (23 kB at 32 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.1/plexus-utils-3.5.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.1/plexus-utils-3.5.1.pom (8.8 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/10/plexus-10.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/10/plexus-10.pom (25 kB at 89 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-filtering/3.3.1/maven-filtering-3.3.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-filtering/3.3.1/maven-filtering-3.3.1.pom (6.0 kB at 22 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/39/maven-shared-components-39.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/39/maven-shared-components-39.pom (3.2 kB at 6.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.pom (612 B at 1.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.pom (2.7 kB at 7.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/1.7.36/slf4j-parent-1.7.36.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/1.7.36/slf4j-parent-1.7.36.pom (14 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-build-api/0.0.7/plexus-build-api-0.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-build-api/0.0.7/plexus-build-api-0.0.7.pom (3.2 kB at 8.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/15/spice-parent-15.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/15/spice-parent-15.pom (8.4 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/5/forge-parent-5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/5/forge-parent-5.pom (8.4 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.0/plexus-utils-3.5.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.0/plexus-utils-3.5.0.pom (8.0 kB at 39 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.11.0/commons-io-2.11.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.11.0/commons-io-2.11.0.pom (20 kB at 50 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/52/commons-parent-52.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/52/commons-parent-52.pom (79 kB at 129 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/23/apache-23.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/23/apache-23.pom (18 kB at 44 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.7.2/junit-bom-5.7.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.7.2/junit-bom-5.7.2.pom (5.1 kB at 9.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.pom (31 kB at 78 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.7.1/junit-bom-5.7.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.7.1/junit-bom-5.7.1.pom (5.1 kB at 20 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.26/plexus-interpolation-1.26.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.1/plexus-utils-3.5.1.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-filtering/3.3.1/maven-filtering-3.3.1.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-filtering/3.3.1/maven-filtering-3.3.1.jar (55 kB at 133 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-build-api/0.0.7/plexus-build-api-0.0.7.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/javax.inject-1.jar (2.5 kB at 5.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.26/plexus-interpolation-1.26.jar (85 kB at 184 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar (41 kB at 88 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.1/plexus-utils-3.5.1.jar (269 kB at 385 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-build-api/0.0.7/plexus-build-api-0.0.7.jar (8.5 kB at 8.4 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar (327 kB at 316 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.jar (587 kB at 494 kB/s)
+notas-seguras-app-1      | [INFO] Copying 1 resource from src/main/resources to target/classes
+notas-seguras-app-1      | [INFO] Copying 1 resource from src/main/resources to target/classes
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --- maven-compiler-plugin:3.11.0:compile (default-compile) @ notas-seguras ---
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.3.4/maven-shared-utils-3.3.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.3.4/maven-shared-utils-3.3.4.pom (5.8 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/34/maven-shared-components-34.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/34/maven-shared-components-34.pom (5.1 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/34/maven-parent-34.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/34/maven-parent-34.pom (43 kB at 174 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.pom (14 kB at 44 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/42/commons-parent-42.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/42/commons-parent-42.pom (68 kB at 129 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/18/apache-18.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/18/apache-18.pom (16 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.pom (4.7 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/19/maven-shared-components-19.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/19/maven-shared-components-19.pom (6.4 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/23/maven-parent-23.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/23/maven-parent-23.pom (33 kB at 51 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/13/apache-13.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/13/apache-13.pom (14 kB at 22 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.pom (815 B at 1.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.5.5/plexus-containers-1.5.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.5.5/plexus-containers-1.5.5.pom (4.2 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.7/plexus-2.0.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.7/plexus-2.0.7.pom (17 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-java/1.1.2/plexus-java-1.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-java/1.1.2/plexus-java-1.1.2.pom (5.0 kB at 26 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-languages/1.1.2/plexus-languages-1.1.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-languages/1.1.2/plexus-languages-1.1.2.pom (4.1 kB at 7.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.4/asm-9.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.4/asm-9.4.pom (2.4 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/ow2/1.5.1/ow2-1.5.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/ow2/1.5.1/ow2-1.5.1.pom (11 kB at 35 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/thoughtworks/qdox/qdox/2.0.3/qdox-2.0.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/thoughtworks/qdox/qdox/2.0.3/qdox-2.0.3.pom (17 kB at 54 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-api/2.13.0/plexus-compiler-api-2.13.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-api/2.13.0/plexus-compiler-api-2.13.0.pom (1.1 kB at 3.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler/2.13.0/plexus-compiler-2.13.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler/2.13.0/plexus-compiler-2.13.0.pom (8.4 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-components/10.0/plexus-components-10.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-components/10.0/plexus-components-10.0.pom (2.7 kB at 3.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-manager/2.13.0/plexus-compiler-manager-2.13.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-manager/2.13.0/plexus-compiler-manager-2.13.0.pom (1.1 kB at 3.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/2.1.1/plexus-component-annotations-2.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/2.1.1/plexus-component-annotations-2.1.1.pom (770 B at 2.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/2.1.1/plexus-containers-2.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/2.1.1/plexus-containers-2.1.1.pom (6.0 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/6.5/plexus-6.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/6.5/plexus-6.5.pom (26 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-javac/2.13.0/plexus-compiler-javac-2.13.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-javac/2.13.0/plexus-compiler-javac-2.13.0.pom (1.2 kB at 2.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compilers/2.13.0/plexus-compilers-2.13.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compilers/2.13.0/plexus-compilers-2.13.0.pom (1.3 kB at 3.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.3.4/maven-shared-utils-3.3.4.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-java/1.1.2/plexus-java-1.1.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.5/plexus-component-annotations-1.5.5.jar (4.2 kB at 1.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.4/asm-9.4.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-incremental/1.1/maven-shared-incremental-1.1.jar (14 kB at 4.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/thoughtworks/qdox/qdox/2.0.3/qdox-2.0.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar (215 kB at 69 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-api/2.13.0/plexus-compiler-api-2.13.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-java/1.1.2/plexus-java-1.1.2.jar (55 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.0/plexus-utils-3.5.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.3.4/maven-shared-utils-3.3.4.jar (153 kB at 42 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-manager/2.13.0/plexus-compiler-manager-2.13.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-api/2.13.0/plexus-compiler-api-2.13.0.jar (27 kB at 7.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-javac/2.13.0/plexus-compiler-javac-2.13.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.4/asm-9.4.jar (122 kB at 32 kB/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-manager/2.13.0/plexus-compiler-manager-2.13.0.jar (4.7 kB at 1.2 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-compiler-javac/2.13.0/plexus-compiler-javac-2.13.0.jar (23 kB at 5.7 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.5.0/plexus-utils-3.5.0.jar (267 kB at 67 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/thoughtworks/qdox/qdox/2.0.3/qdox-2.0.3.jar (334 kB at 83 kB/s)
+notas-seguras-app-1      | [INFO] Changes detected - recompiling the module! :dependency
+notas-seguras-app-1      | [INFO] Compiling 17 source files with javac [debug release 17] to target/classes
+notas-seguras-app-1      | [INFO] /notas-seguras/src/main/java/com/aplicacion/notasseguras/business/entity/Nota.java: /notas-seguras/src/main/java/com/aplicacion/notasseguras/business/entity/Nota.java uses or overrides a deprecated API.
+notas-seguras-app-1      | [INFO] /notas-seguras/src/main/java/com/aplicacion/notasseguras/business/entity/Nota.java: Recompile with -Xlint:deprecation for details.
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --- maven-resources-plugin:3.3.1:testResources (default-testResources) @ notas-seguras ---
+notas-seguras-app-1      | [INFO] skip non existing resourceDirectory /notas-seguras/src/test/resources
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --- maven-compiler-plugin:3.11.0:testCompile (default-testCompile) @ notas-seguras ---
+notas-seguras-app-1      | [INFO] Changes detected - recompiling the module! :dependency
+notas-seguras-app-1      | [INFO] Compiling 1 source file with javac [debug release 17] to target/test-classes
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] <<< spring-boot-maven-plugin:3.1.3:run (default-cli) < test-compile @ notas-seguras <<<
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO]
+notas-seguras-app-1      | [INFO] --- spring-boot-maven-plugin:3.1.3:run (default-cli) @ notas-seguras ---
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.3/spring-boot-buildpack-platform-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.3/spring-boot-buildpack-platform-3.1.3.pom (3.2 kB at 1.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.pom (19 kB at 58 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.14.2/jackson-base-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.14.2/jackson-base-2.14.2.pom (10 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.2/jackson-bom-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-bom/2.14.2/jackson-bom-2.14.2.pom (17 kB at 49 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.pom (6.2 kB at 7.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.pom (7.0 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.pom (4.4 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.14.2/jackson-modules-java8-2.14.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-modules-java8/2.14.2/jackson-modules-java8-2.14.2.pom (3.1 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.7.0/jna-platform-5.7.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.7.0/jna-platform-5.7.0.pom (1.8 kB at 785 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.7.0/jna-5.7.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.7.0/jna-5.7.0.pom (1.6 kB at 3.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.21/commons-compress-1.21.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.21/commons-compress-1.21.pom (20 kB at 8.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.pom (6.0 kB at 2.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5-parent/5.2.1/httpclient5-parent-5.2.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5-parent/5.2.1/httpclient5-parent-5.2.1.pom (17 kB at 67 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/httpcomponents-parent/13/httpcomponents-parent-13.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/httpcomponents-parent/13/httpcomponents-parent-13.pom (30 kB at 35 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.pom (3.9 kB at 5.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-parent/5.2/httpcore5-parent-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-parent/5.2/httpcore5-parent-5.2.pom (14 kB at 34 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.pom (3.6 kB at 3.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/tomlj/tomlj/1.0.0/tomlj-1.0.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/tomlj/tomlj/1.0.0/tomlj-1.0.0.pom (2.8 kB at 3.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.7.2/antlr4-runtime-4.7.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.7.2/antlr4-runtime-4.7.2.pom (3.6 kB at 3.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-master/4.7.2/antlr4-master-4.7.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-master/4.7.2/antlr4-master-4.7.2.pom (4.4 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.pom (4.3 kB at 5.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.3/spring-boot-loader-tools-3.1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.3/spring-boot-loader-tools-3.1.3.pom (2.2 kB at 1.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.8/plexus-utils-1.5.8.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.8/plexus-utils-1.5.8.pom (8.1 kB at 9.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.2/plexus-2.0.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.2/plexus-2.0.2.pom (12 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-shade-plugin/3.2.4/maven-shade-plugin-3.2.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-shade-plugin/3.2.4/maven-shade-plugin-3.2.4.pom (11 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-plugins/34/maven-plugins-34.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-plugins/34/maven-plugins-34.pom (11 kB at 83 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.0/maven-plugin-api-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.0/maven-plugin-api-3.0.pom (2.3 kB at 3.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.0/maven-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven/3.0/maven-3.0.pom (22 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/15/maven-parent-15.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/15/maven-parent-15.pom (24 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/6/apache-6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/6/apache-6.pom (13 kB at 38 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model/3.0/maven-model-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model/3.0/maven-model-3.0.pom (3.9 kB at 4.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/2.0.4/plexus-utils-2.0.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/2.0.4/plexus-utils-2.0.4.pom (3.3 kB at 6.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.6/plexus-2.0.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.6/plexus-2.0.6.pom (17 kB at 46 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.0/maven-artifact-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.0/maven-artifact-3.0.pom (1.9 kB at 652 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-plexus/1.4.2/sisu-inject-plexus-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-plexus/1.4.2/sisu-inject-plexus-1.4.2.pom (5.4 kB at 6.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-plexus/1.4.2/guice-plexus-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-plexus/1.4.2/guice-plexus-1.4.2.pom (3.1 kB at 1.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-bean/1.4.2/guice-bean-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/inject/guice-bean/1.4.2/guice-bean-1.4.2.pom (2.6 kB at 3.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject/1.4.2/sisu-inject-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject/1.4.2/sisu-inject-1.4.2.pom (1.2 kB at 885 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-parent/1.4.2/sisu-parent-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-parent/1.4.2/sisu-parent-1.4.2.pom (7.8 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/6/forge-parent-6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/6/forge-parent-6.pom (11 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.4/plexus-component-annotations-1.5.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.5.4/plexus-component-annotations-1.5.4.pom (815 B at 755 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.5.4/plexus-containers-1.5.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.5.4/plexus-containers-1.5.4.pom (4.2 kB at 4.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.5/plexus-2.0.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/2.0.5/plexus-2.0.5.pom (17 kB at 22 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.2.3/plexus-classworlds-2.2.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.2.3/plexus-classworlds-2.2.3.pom (4.0 kB at 17 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/2.0.5/plexus-utils-2.0.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/2.0.5/plexus-utils-2.0.5.pom (3.3 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-bean/1.4.2/sisu-inject-bean-1.4.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-bean/1.4.2/sisu-inject-bean-1.4.2.pom (5.5 kB at 2.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/2.1.7/sisu-guice-2.1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/2.1.7/sisu-guice-2.1.7.pom (11 kB at 18 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.0/maven-core-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.0/maven-core-3.0.pom (6.6 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.0/maven-settings-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.0/maven-settings-3.0.pom (1.9 kB at 2.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.0/maven-settings-builder-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.0/maven-settings-builder-3.0.pom (2.2 kB at 2.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.14/plexus-interpolation-1.14.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.14/plexus-interpolation-1.14.pom (910 B at 1.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-components/1.1.18/plexus-components-1.1.18.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-components/1.1.18/plexus-components-1.1.18.pom (5.4 kB at 7.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-sec-dispatcher/1.3/plexus-sec-dispatcher-1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-sec-dispatcher/1.3/plexus-sec-dispatcher-1.3.pom (3.0 kB at 1.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/12/spice-parent-12.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/12/spice-parent-12.pom (6.8 kB at 1.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/4/forge-parent-4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/4/forge-parent-4.pom (8.4 kB at 8.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.5/plexus-utils-1.5.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.5/plexus-utils-1.5.5.pom (5.1 kB at 7.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/1.0.11/plexus-1.0.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/1.0.11/plexus-1.0.11.pom (9.0 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-cipher/1.4/plexus-cipher-1.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-cipher/1.4/plexus-cipher-1.4.pom (2.1 kB at 2.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.0/maven-repository-metadata-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.0/maven-repository-metadata-3.0.pom (1.9 kB at 2.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.0/maven-model-builder-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.0/maven-model-builder-3.0.pom (2.2 kB at 1.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.0/maven-aether-provider-3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.0/maven-aether-provider-3.0.pom (2.5 kB at 3.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-api/1.7/aether-api-1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-api/1.7/aether-api-1.7.pom (1.7 kB at 4.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-parent/1.7/aether-parent-1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-parent/1.7/aether-parent-1.7.pom (7.7 kB at 8.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-util/1.7/aether-util-1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-util/1.7/aether-util-1.7.pom (2.1 kB at 3.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-impl/1.7/aether-impl-1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-impl/1.7/aether-impl-1.7.pom (3.7 kB at 4.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-spi/1.7/aether-spi-1.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-spi/1.7/aether-spi-1.7.pom (1.7 kB at 1.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.3.0/plexus-utils-3.3.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.3.0/plexus-utils-3.3.0.pom (5.2 kB at 4.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-artifact-transfer/0.12.0/maven-artifact-transfer-0.12.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-artifact-transfer/0.12.0/maven-artifact-transfer-0.12.0.pom (11 kB at 6.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/33/maven-shared-components-33.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/33/maven-shared-components-33.pom (5.1 kB at 1.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.7.1/plexus-component-annotations-1.7.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.7.1/plexus-component-annotations-1.7.1.pom (770 B at 857 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.7.1/plexus-containers-1.7.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.7.1/plexus-containers-1.7.1.pom (5.0 kB at 3.5 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/4.0/plexus-4.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/4.0/plexus-4.0.pom (22 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/10/forge-parent-10.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/forge/forge-parent/10/forge-parent-10.pom (14 kB at 43 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.0.1/maven-common-artifact-filters-3.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.0.1/maven-common-artifact-filters-3.0.1.pom (4.8 kB at 4.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/30/maven-shared-components-30.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-components/30/maven-shared-components-30.pom (4.6 kB at 29 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/30/maven-parent-30.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-parent/30/maven-parent-30.pom (41 kB at 154 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.1.0/maven-shared-utils-3.1.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.1.0/maven-shared-utils-3.1.0.pom (5.0 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.5/commons-io-2.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-io/commons-io/2.5/commons-io-2.5.pom (13 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/39/commons-parent-39.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-parent/39/commons-parent-39.pom (62 kB at 214 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/apache/16/apache-16.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/apache/16/apache-16.pom (15 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.1.1/plexus-utils-3.1.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/3.1.1/plexus-utils-3.1.1.pom (5.1 kB at 9.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.11/commons-codec-1.11.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.11/commons-codec-1.11.pom (14 kB at 43 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.5/slf4j-api-1.7.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.5/slf4j-api-1.7.5.pom (2.7 kB at 4.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/1.7.5/slf4j-parent-1.7.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/1.7.5/slf4j-parent-1.7.5.pom (12 kB at 43 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/8.0/asm-8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/8.0/asm-8.0.pom (2.9 kB at 8.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-commons/8.0/asm-commons-8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-commons/8.0/asm-commons-8.0.pom (3.7 kB at 19 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/8.0/asm-tree-8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/8.0/asm-tree-8.0.pom (3.1 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-analysis/8.0/asm-analysis-8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-analysis/8.0/asm-analysis-8.0.pom (3.2 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jdom/jdom2/2.0.6/jdom2-2.0.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jdom/jdom2/2.0.6/jdom2-2.0.6.pom (4.6 kB at 6.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-dependency-tree/3.0.1/maven-dependency-tree-3.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-dependency-tree/3.0.1/maven-dependency-tree-3.0.1.pom (7.5 kB at 45 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.6/plexus-component-annotations-1.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-component-annotations/1.6/plexus-component-annotations-1.6.pom (748 B at 3.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.6/plexus-containers-1.6.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-containers/1.6/plexus-containers-1.6.pom (3.8 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/3.3.2/plexus-3.3.2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus/3.3.2/plexus-3.3.2.pom (22 kB at 44 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/17/spice-parent-17.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/spice/spice-parent/17/spice-parent-17.pom (6.8 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/0.9.0.M2/aether-util-0.9.0.M2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/0.9.0.M2/aether-util-0.9.0.M2.pom (2.0 kB at 5.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether/0.9.0.M2/aether-0.9.0.M2.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether/0.9.0.M2/aether-0.9.0.M2.pom (28 kB at 102 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/vafer/jdependency/2.4.0/jdependency-2.4.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/vafer/jdependency/2.4.0/jdependency-2.4.0.pom (15 kB at 53 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-util/8.0/asm-util-8.0.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-util/8.0/asm-util-8.0.pom (3.7 kB at 7.3 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/28.2-android/guava-28.2-android.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/28.2-android/guava-28.2-android.pom (11 kB at 21 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/28.2-android/guava-parent-28.2-android.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/28.2-android/guava-parent-28.2-android.pom (13 kB at 14 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.pom (2.4 kB at 2.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/26.0-android/guava-parent-26.0-android.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/26.0-android/guava-parent-26.0-android.pom (10 kB at 25 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.pom (2.3 kB at 6.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/checkerframework/checker-compat-qual/2.5.5/checker-compat-qual-2.5.5.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/checkerframework/checker-compat-qual/2.5.5/checker-compat-qual-2.5.5.pom (2.7 kB at 1.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.3.4/error_prone_annotations-2.3.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.3.4/error_prone_annotations-2.3.4.pom (2.1 kB at 10 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_parent/2.3.4/error_prone_parent-2.3.4.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_parent/2.3.4/error_prone_parent-2.3.4.pom (5.4 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/1.3/j2objc-annotations-1.3.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/1.3/j2objc-annotations-1.3.pom (2.8 kB at 9.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.7/commons-lang3-3.7.pom
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.7/commons-lang3-3.7.pom (28 kB at 97 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.3/spring-boot-buildpack-platform-3.1.3.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-annotations/2.14.2/jackson-annotations-2.14.2.jar (77 kB at 131 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.7.0/jna-platform-5.7.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names/2.14.2/jackson-module-parameter-names-2.14.2.jar (9.5 kB at 13 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.7.0/jna-5.7.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-core/2.14.2/jackson-core-2.14.2.jar (459 kB at 469 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.21/commons-compress-1.21.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-buildpack-platform/3.1.3/spring-boot-buildpack-platform-3.1.3.jar (256 kB at 157 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.7.0/jna-platform-5.7.0.jar (1.3 MB at 604 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar (840 kB at 290 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.21/commons-compress-1.21.jar (1.0 MB at 321 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/tomlj/tomlj/1.0.0/tomlj-1.0.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2/httpcore5-h2-5.2.jar (237 kB at 69 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.7.2/antlr4-runtime-4.7.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.7.0/jna-5.7.0.jar (1.7 MB at 479 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/tomlj/tomlj/1.0.0/tomlj-1.0.0.jar (157 kB at 44 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.3/spring-boot-loader-tools-3.1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2/httpcore5-5.2.jar (853 kB at 240 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.8/plexus-utils-1.5.8.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.14.2/jackson-databind-2.14.2.jar (1.6 MB at 414 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-shade-plugin/3.2.4/maven-shade-plugin-3.2.4.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.7.2/antlr4-runtime-4.7.2.jar (338 kB at 84 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.0/maven-plugin-api-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader-tools/3.1.3/spring-boot-loader-tools-3.1.3.jar (251 kB at 62 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-plexus/1.4.2/sisu-inject-plexus-1.4.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar (20 kB at 4.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-bean/1.4.2/sisu-inject-bean-1.4.2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-utils/1.5.8/plexus-utils-1.5.8.jar (268 kB at 66 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/2.1.7/sisu-guice-2.1.7-noaop.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-shade-plugin/3.2.4/maven-shade-plugin-3.2.4.jar (134 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model/3.0/maven-model-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-plugin-api/3.0/maven-plugin-api-3.0.jar (49 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.0/maven-core-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-plexus/1.4.2/sisu-inject-plexus-1.4.2.jar (202 kB at 45 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.0/maven-settings-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-inject-bean/1.4.2/sisu-inject-bean-1.4.2.jar (153 kB at 33 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.0/maven-settings-builder-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/sisu/sisu-guice/2.1.7/sisu-guice-2.1.7-noaop.jar (472 kB at 101 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.0/maven-repository-metadata-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model/3.0/maven-model-3.0.jar (165 kB at 35 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.0/maven-model-builder-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-repository-metadata/3.0/maven-repository-metadata-3.0.jar (30 kB at 4.8 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.0/maven-aether-provider-3.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings/3.0/maven-settings-3.0.jar (47 kB at 7.5 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-core/3.0/maven-core-3.0.jar (527 kB at 84 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-spi/1.7/aether-spi-1.7.jar
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-impl/1.7/aether-impl-1.7.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-settings-builder/3.0/maven-settings-builder-3.0.jar (38 kB at 6.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-api/1.7/aether-api-1.7.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-model-builder/3.0/maven-model-builder-3.0.jar (148 kB at 24 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-util/1.7/aether-util-1.7.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-aether-provider/3.0/maven-aether-provider-3.0.jar (51 kB at 7.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.14/plexus-interpolation-1.14.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-spi/1.7/aether-spi-1.7.jar (14 kB at 2.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.2.3/plexus-classworlds-2.2.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-util/1.7/aether-util-1.7.jar (108 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-sec-dispatcher/1.3/plexus-sec-dispatcher-1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-impl/1.7/aether-impl-1.7.jar (106 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-cipher/1.4/plexus-cipher-1.4.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/aether/aether-api/1.7/aether-api-1.7.jar (74 kB at 11 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.0/maven-artifact-3.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-sec-dispatcher/1.3/plexus-sec-dispatcher-1.3.jar (29 kB at 4.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-artifact-transfer/0.12.0/maven-artifact-transfer-0.12.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-classworlds/2.2.3/plexus-classworlds-2.2.3.jar (46 kB at 6.7 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.0.1/maven-common-artifact-filters-3.0.1.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/maven-artifact/3.0/maven-artifact-3.0.jar (52 kB at 7.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.1.0/maven-shared-utils-3.1.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/sonatype/plexus/plexus-cipher/1.4/plexus-cipher-1.4.jar (13 kB at 1.9 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.11/commons-codec-1.11.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/plexus/plexus-interpolation/1.14/plexus-interpolation-1.14.jar (61 kB at 8.4 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/8.0/asm-8.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-common-artifact-filters/3.0.1/maven-common-artifact-filters-3.0.1.jar (61 kB at 8.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-commons/8.0/asm-commons-8.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-artifact-transfer/0.12.0/maven-artifact-transfer-0.12.0.jar (120 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/8.0/asm-tree-8.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm/8.0/asm-8.0.jar (122 kB at 16 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-analysis/8.0/asm-analysis-8.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-shared-utils/3.1.0/maven-shared-utils-3.1.0.jar (164 kB at 22 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/jdom/jdom2/2.0.6/jdom2-2.0.6.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.11/commons-codec-1.11.jar (335 kB at 43 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-dependency-tree/3.0.1/maven-dependency-tree-3.0.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-commons/8.0/asm-commons-8.0.jar (72 kB at 9.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/0.9.0.M2/aether-util-0.9.0.M2.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-analysis/8.0/asm-analysis-8.0.jar (33 kB at 4.2 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/vafer/jdependency/2.4.0/jdependency-2.4.0.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jdom/jdom2/2.0.6/jdom2-2.0.6.jar (305 kB at 34 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-util/8.0/asm-util-8.0.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/shared/maven-dependency-tree/3.0.1/maven-dependency-tree-3.0.1.jar (37 kB at 4.1 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/28.2-android/guava-28.2-android.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-tree/8.0/asm-tree-8.0.jar (53 kB at 5.6 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/aether/aether-util/0.9.0.M2/aether-util-0.9.0.M2.jar (134 kB at 12 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/ow2/asm/asm-util/8.0/asm-util-8.0.jar (85 kB at 7.0 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/checkerframework/checker-compat-qual/2.5.5/checker-compat-qual-2.5.5.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/vafer/jdependency/2.4.0/jdependency-2.4.0.jar (180 kB at 15 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.3.4/error_prone_annotations-2.3.4.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar (4.6 kB at 378 B/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/1.3/j2objc-annotations-1.3.jar
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/guava/28.2-android/guava-28.2-android.jar (2.6 MB at 215 kB/s)
+notas-seguras-app-1      | Downloading from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.7/commons-lang3-3.7.jar
+Downloaded from central: https://repo.maven.apache.org/maven2/org/checkerframework/checker-compat-qual/2.5.5/checker-compat-qual-2.5.5.jar (5.9 kB at 462 B/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.3.4/error_prone_annotations-2.3.4.jar (14 kB at 1.1 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar (2.2 kB at 173 B/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.7/commons-lang3-3.7.jar (500 kB at 39 kB/s)
+notas-seguras-app-1      | Downloaded from central: https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/1.3/j2objc-annotations-1.3.jar (8.8 kB at 668 B/s)
+notas-seguras-app-1      | [INFO] Attaching agents: []
+notas-seguras-app-1      |
+notas-seguras-app-1      |   .   ____          _            __ _ _
+notas-seguras-app-1      |  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+notas-seguras-app-1      | ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+notas-seguras-app-1      |  \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+notas-seguras-app-1      |   '  |____| .__|_| |_|_| |_\__, | / / / /
+notas-seguras-app-1      |  =========|_|==============|___/=/_/_/_/
+notas-seguras-app-1      |  :: Spring Boot ::                (v3.1.3)
+notas-seguras-app-1      |
+notas-seguras-app-1      | 2023-09-29T22:11:43.490Z  INFO 81 --- [  restartedMain] c.a.n.NotasSegurasApplication            : Starting NotasSegurasApplication using Java 17.0.1 with PID 81 (/notas-seguras/target/classes started by root in /notas-seguras)
+notas-seguras-app-1      | 2023-09-29T22:11:43.521Z  INFO 81 --- [  restartedMain] c.a.n.NotasSegurasApplication            : No active profile set, falling back to 1 default profile: "default"
+notas-seguras-app-1      | 2023-09-29T22:11:46.008Z  INFO 81 --- [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+notas-seguras-app-1      | 2023-09-29T22:11:46.009Z  INFO 81 --- [  restartedMain] .e.DevToolsPropertyDefaultsPostProcessor : For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+notas-seguras-app-1      | 2023-09-29T22:12:43.065Z  INFO 81 --- [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+notas-seguras-app-1      | 2023-09-29T22:12:47.790Z  INFO 81 --- [  restartedMain] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 4228 ms. Found 2 JPA repository interfaces.
+notas-seguras-app-1      | 2023-09-29T22:13:17.932Z  INFO 81 --- [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 4002 (http)
+notas-seguras-app-1      | 2023-09-29T22:13:18.500Z  INFO 81 --- [  restartedMain] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+notas-seguras-app-1      | 2023-09-29T22:13:18.501Z  INFO 81 --- [  restartedMain] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.12]
+notas-seguras-app-1      | 2023-09-29T22:13:19.865Z  INFO 81 --- [  restartedMain] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+notas-seguras-app-1      | 2023-09-29T22:13:19.868Z  INFO 81 --- [  restartedMain] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 93854 ms
+notas-seguras-app-1      | 2023-09-29T22:13:22.331Z  INFO 81 --- [  restartedMain] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+notas-seguras-app-1      | 2023-09-29T22:13:27.059Z  INFO 81 --- [  restartedMain] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.2.7.Final
+notas-seguras-app-1      | 2023-09-29T22:13:27.173Z  INFO 81 --- [  restartedMain] org.hibernate.cfg.Environment            : HHH000406: Using bytecode reflection optimizer
+notas-seguras-app-1      | 2023-09-29T22:13:41.805Z  INFO 81 --- [  restartedMain] o.h.b.i.BytecodeProviderInitiator        : HHH000021: Bytecode provider name : bytebuddy
+notas-seguras-app-1      | 2023-09-29T22:13:53.492Z  INFO 81 --- [  restartedMain] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+notas-seguras-app-1      | 2023-09-29T22:13:54.604Z  INFO 81 --- [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+notas-seguras-app-1      | 2023-09-29T22:14:01.162Z  INFO 81 --- [  restartedMain] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@f3e8c77
+notas-seguras-app-1      | 2023-09-29T22:14:01.207Z  INFO 81 --- [  restartedMain] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+notas-seguras-app-1      | 2023-09-29T22:14:08.083Z  INFO 81 --- [  restartedMain] o.h.b.i.BytecodeProviderInitiator        : HHH000021: Bytecode provider name : bytebuddy
+notas-seguras-app-1      | 2023-09-29T22:14:31.399Z  INFO 81 --- [  restartedMain] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000490: Using JtaPlatform implementation: [org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform]
+notas-seguras-app-1      | 2023-09-29T22:14:31.681Z DEBUG 81 --- [  restartedMain] org.hibernate.SQL                        : drop table if exists notas
+notas-seguras-app-1      | 2023-09-29T22:14:31.717Z DEBUG 81 --- [  restartedMain] org.hibernate.SQL                        : drop table if exists usuarios
+notas-seguras-app-1      | 2023-09-29T22:14:31.758Z DEBUG 81 --- [  restartedMain] org.hibernate.SQL                        : create table notas (fecha DATETIME DEFAULT CURRENT_TIMESTAMP, id bigint not null auto_increment, contenido varchar(255) not null, titulo varchar(255) not null, primary key (id)) engine=InnoDB
+notas-seguras-app-1      | 2023-09-29T22:14:33.752Z DEBUG 81 --- [  restartedMain] org.hibernate.SQL                        : create table usuarios (id bigint not null auto_increment, name varchar(255), password varchar(255), role enum ('ADMINISTRATOR','CUSTOMER'), username varchar(255), primary key (id)) engine=InnoDB
+notas-seguras-app-1      | 2023-09-29T22:14:35.751Z  INFO 81 --- [  restartedMain] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+notas-seguras-app-1      | 2023-09-29T22:14:42.213Z  WARN 81 --- [  restartedMain] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+notas-seguras-app-1      | 2023-09-29T22:14:43.182Z  INFO 81 --- [  restartedMain] o.s.s.web.DefaultSecurityFilterChain     : Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@38e72354, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@34539ba0, org.springframework.security.web.context.SecurityContextHolderFilter@4fa01d93, org.springframework.security.web.header.HeaderWriterFilter@f88a9a4, org.springframework.security.web.authentication.logout.LogoutFilter@4dd9eb90, com.aplicacion.notasseguras.security.config.filter.JwtAuthenticationFilter@3586e77, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@6429eaa7, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@14d0d2ac, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@77f10b78, org.springframework.security.web.session.SessionManagementFilter@4d2d7e73, org.springframework.security.web.access.ExceptionTranslationFilter@4b5ce97f]
+notas-seguras-app-1      | 2023-09-29T22:14:50.690Z  INFO 81 --- [  restartedMain] o.s.b.d.a.OptionalLiveReloadServer       : LiveReload server is running on port 35729
+notas-seguras-app-1      | 2023-09-29T22:14:51.029Z  INFO 81 --- [  restartedMain] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 4002 (http) with context path ''
+notas-seguras-app-1      | 2023-09-29T22:14:51.045Z  INFO 81 --- [  restartedMain] c.a.n.NotasSegurasApplication            : Started NotasSegurasApplication in 222.869 seconds (process running for 271.533)
+
+Notar que las dependencias que son descargadas y copiadas al contenedor están en la carpeta .m2 y debe agregarse al archivo .gitignore para evitar su versionamiento:
+
+.gitignore:
+
+## Docker ##
+.m2
+
+
+Gestión de las imágenes y contenedores
+======================================
+
+Crear imágenes y contenedor
+---------------------------
+docker-compose up
+
+Ejecución en background:
+docker-compose up -d
+
+Monitorear ejecuciones
+----------------------
+Contenedores activos:
+docker ps
+
+Borrar contenedores
+-------------------
+Contenedor específico:
+docker kill :container_id
+
+Todos los contenedores:
+docker-compose down
+
+Ver todas las imágenes
+----------------------
+docker images
+
+Ingresar al terminal de un contenedor particular
+------------------------------------------------
+docker exec -it :container_id bash
+
+Logs
+----
+docker-compose logs
+
+Detener contenedor
+------------------
+docker-compose stop
+
+Iniciar contenedor
+------------------
+docker-compose start
+
+
+
+
+
