@@ -1,0 +1,206 @@
+Java - Programación Reactiva
+****************************
+
+Programación reactiva - generalidades
+=====================================
+
+- Es un paradigma de programación donde se espera que las aplicaciones sean capaces de reaccionar ante cualquier evento en un flujo de datos, así como también permitir la propagación de cambio con base en dicho manejo de eventos.
+- A diferencia de la forma tradicional de trabajar con programación imperativa (instrucciones en secuencia), se emplea programación funcional (se declaran funciones que sintetizan las instrucciones imperativas).
+- El patrón de diseño que se emplea es el patrón de comportamiento de observables. O sea, un objeto se suscribe a otro, donde el primero es el observador y el segundo es el observable, y el primero debe reaccionar ante el cambio (por medio de una notificación) generado por el segundo.
+
+Ventajas de este paradigma
+--------------------------
+
+- Tolerancia a fallos/errores.
+- Se puede manejar las respuestas de forma síncrona o asíncrona.
+- Inmutabilidad de objetos.
+- Simplifica código.
+- Permite trabajar con concurrencia (o sea, múltiples peticiones HTTP a la vez).
+- Etcétera.
+
+
+API Reactor - Flux
+==================
+
+Agregar a pom.xml:
+
+		<dependency>
+			<groupId>io.projectreactor</groupId>
+			<artifactId>reactor-core</artifactId>
+		</dependency>
+
+Generalidades
+-------------
+
+Según la documentación del API de Reactor, existen dos clases que implementan una interfaz Publisher, la cual tiene el método subscribe para poder establecer la subscripción a los eventos que deben recibirse. Estas con Flux y Mono:
+
+- Flux: es la clase que maneja un flujo de varios elementos en su haber y, cuando existe una condición de error, se detiene su ejecución.
+- Mono: a diferencia de Flux, solo maneja un elemento y, ante un error, se reporta y se detiene la ejecución.
+
+Concretamente, y como se podrá apreciar en WebFlux, Mono puede esperar un tipo de dato Optional en métodos de la interfaz JpaRepository tales como findById, mientras que Flux espera listas.
+
+Declaración e inicialización de flujos de datos
+-----------------------------------------------
+
+Con Flux se puede declarar así:
+
+Flux<String> nombres = Flux.just("Andres Guzman" , "Pedro Fulano" , "Maria Fulana", "Diego Sultano", "Juan Mengano", "Bruce Lee", "Bruce Willis");
+
+También es posible trabajar con la clase List<T> de la siguiente forma:
+
+List<String> usuariosList = new ArrayList<>();
+usuariosList.add("Andres Guzman");
+usuariosList.add("Pedro Fulano");
+usuariosList.add("Maria Fulana");
+usuariosList.add("Diego Sultano");
+usuariosList.add("Juan Mengano");
+usuariosList.add("Bruce Lee");
+usuariosList.add("Bruce Willis");
+
+Flux<String> nombres = Flux.fromIterable(usuariosList);
+
+Instrucciones en el flujo de datos
+----------------------------------
+
+Considerar el siguiente modelo (clase):
+
+public class Usuario {
+
+	private String nombre;
+	private String apellido;
+
+	public Usuario(String nombre, String apellido) {
+		this.nombre = nombre;
+		this.apellido = apellido;
+	}
+	public String getNombre() {
+		return nombre;
+	}
+	public void setNombre(String nombre) {
+		this.nombre = nombre;
+	}
+	public String getApellido() {
+		return apellido;
+	}
+	public void setApellido(String apellido) {
+		this.apellido = apellido;
+	}
+	@Override
+	public String toString() {
+		return "Usuario [nombre=" + nombre + ", apellido=" + apellido + "]";
+	}
+	
+	
+}
+
+Aprovechando la característica de la programación funcional, se puede trabajar como una secuencia de funciones sobre el flujo antes declarado:
+
+Flux<Usuario> usuarios = nombres
+        .map(nombre -> new Usuario(nombre.split(" ")[0].toUpperCase(), nombre.split(" ")[1].toUpperCase())) // paso 01
+		.filter(usuario -> usuario.getNombre().equalsIgnoreCase("bruce")) // paso 02
+		.doOnNext(usuario -> { // paso 03
+			if(usuario == null) {
+				throw new RuntimeException("Nombres no pueden ser vacíos");
+			} 
+
+			System.out.println(usuario.getNombre().concat(" ").concat(usuario.getApellido()));
+		})
+		.map(usuario -> { // paso 04
+			String nombre =  usuario.getNombre().toLowerCase();
+			usuario.setNombre(nombre);
+			return usuario;
+			});
+
+Explicación de los pasos:
+1. Con el operador map, se transforman los nombres del Flux creado antes a un Flux de instancias de la clase Usuario. Cada instancia de esa clase tiene un nombre y un apellido, y se aprovechan en la inicialización.
+2. Se filtran usuarios con el nombre "bruce" (sin importar mayúsculas o minúsculas).
+3. Se ejecuta un bloque personalizado con la instrucción doOnNext.
+4. Se hace otra transformación con map a minúsculas de todos los nombres de usuarios.
+
+Si se cambia el orden de las instrucciones, la secuencia generará otro resultado.
+
+Ejecución de los flujos definidos
+---------------------------------
+
+Una instancia de Flux o Mono debe invocar e implementar el método subscribe de la interfaz Publisher. En este caso se tiene:
+
+usuarios.subscribe(e -> log.info(e.toString()), // evento 01
+		error -> log.error(error.getMessage()), // evento 02
+		new Runnable() { // evento 03
+			
+			@Override
+			public void run() {
+				log.info("Ha finalizado la ejecución del observable con éxito!");
+			}
+		});
+
+Si bien los argumentos son opcionales, es bastante útil declararlos en subscribe para poder dar seguimiento al cumplimiento del flujo definido previamente.
+
+Deben observarse tres eventos:
+
+1. El resultado de las instrucciones declaradas.
+2. El posible error en la ejecución del flujo.
+3. Una instrucción final cuando se ha completado el flujo.
+
+
+Spring WebFlux
+==============
+
+Basado en Reactor, Spring WebFlux es una alternativa a Spring Web para la creación de aplicaciones web con el patrón MVC.
+Esto implicará que, al inicializar el proyecto con Spring Boot, ya no se use Spring Web sino Spring Reactive Web desde Initializr.
+
+Dependencias para un proyecto Spring Boot reactivo (Spring WebFlux)
+-------------------------------------------------------------------
+
+- Spring Reactive Web (obligatorio, no usar Spring Web).
+- Spring Data R2DBC (obligatorio para trabajar con bases de datos relacionales, las cuales no funcionan directamente con WebFlux). No aplicable a motores NoSQL tales como MongoDB.
+- Flyway Migration (versiona esquemas relacionales).
+- Adaptadores de bases de datos relacionales o no relacionales.
+- Cualquier otra dependencia que aplique.
+
+Uso de WebFlux en el desarrollo web
+-----------------------------------
+
+@RestController
+@RequestMapping("/api/productos")
+public class ProductoRestController {
+
+	@Autowired
+	private ProductoDao dao;
+	
+	private static final Logger log = LoggerFactory.getLogger(ProductoController.class);
+	
+	@GetMapping
+	public Flux<Producto> index(){ // En lugar de retornar colecciones de Java, devuelve un flujo de datos (Flux o Mono)
+
+        Flux<Producto> productos = dao.findAll()
+        		.map(producto -> {
+        			producto.setNombre(producto.getNombre().toUpperCase());
+        			return producto;
+        			})
+        		.doOnNext(prod -> log.info(prod.getNombre()));
+        
+        return productos;
+	}
+
+	@GetMapping("/{id}")
+	public Mono<Producto> show(@PathVariable String id){
+		
+		/* Mono<Producto> producto = dao.findById(id); */ // lo que normalmente se usaría
+		
+		Flux<Producto> productos = dao.findAll();
+		
+		Mono<Producto> producto = productos
+				.filter(p -> p.getId().equals(id))
+				.next()
+				.doOnNext(prod -> log.info(prod.getNombre()));
+				
+		return producto;
+	}
+	
+}
+
+
+
+
+
