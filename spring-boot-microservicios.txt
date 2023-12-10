@@ -1,0 +1,1849 @@
+Spring Boot - Microservicios
+****************************
+
+Creación del proyecto
+=====================
+
+Crear paquete base
+
+1. Ir a Spring Initializr y crear el proyecto Java base sin dependencias y con las siguientes especificaciones:
+- Versión de Java: la más estable (17+)
+- Repos: Maven
+- Versión de Spring Boot: 3.2.0
+- Tipo de empaquetado: jar
+
+En este ejercicio, el paquete base se llamará: com.tinexlab.microservices
+
+2. Generar y descargar.
+
+3. Descomprimir el archivo y borrar todo el contenido excepto los archivos .gitignore y pom.xml.
+
+
+Proyectos de microservicios
+---------------------------
+
+Preliminar: revisar arquitectura del proyecto
+
+1. Ir a Spring Initializr nuevamente y crear los demás proyectos, cada uno constituye un microservicio.
+
+Habrá cuatro microservicios: productos, inventario, órdenes y notificaciones
+
+Inventario:
+
+Paquete: com.tinexlab.inventory_service
+Tiene las mismas especificaciones que el paquete base.
+Dependencias:
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Spring Web
+- Spring Data JPA
+- PostgreSQL Driver
+
+Órdenes:
+
+Paquete: com.tinexlab.orders_service
+Tiene las mismas especificaciones que el paquete base.
+Dependencias:
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Spring Web
+- Spring Data JPA
+- MySQL Driver
+
+Productos
+
+Paquete: com.tinexlab.products_service
+Tiene las mismas especificaciones que el paquete base.
+Dependencias:
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Spring Web
+- Spring Data JPA
+- PostgreSQL Driver
+
+2. Extraer los tres proyectos generados y colocarlos en la carpeta base.
+
+Primera etapa - definir el proyecto con la arquitectura base
+------------------------------------------------------------
+
+1. Abrir el proyecto base con el IDE preferido (e.g. IntelliJ IDEA).
+
+2. Editar los archivos POM:
+
+Proyecto base (microservices):
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.0</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+	<groupId>com.tinexlab</groupId>
+	<artifactId>microservices</artifactId>
+	<version>1.0.0-SNAPSHOT</version> <!--Dejarlo en 1.0.0-->
+	<packaging>pom</packaging>
+
+	<!--Definir las propiedades así en el proyecto base-->
+	<properties>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+	</properties>
+
+	<!--Los módulos que se crearon en Initializr-->
+	<modules>
+		<module>inventory-service</module>
+		<module>orders-service</module>
+		<module>products-service</module>
+	</modules>
+
+
+
+	<dependencies>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+
+		</plugins>
+	</build>
+
+</project>
+
+En los proyectos hijo debe quedar así (antes del tag properties):
+
+inventory-service:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>inventory-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>inventory-service</name>
+	<description>Servicio de inventarios</description>
+
+orders-service:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>orders-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>orders-service</name>
+	<description>Servicio de órdenes</description>
+
+products-service:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>products-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>products-service</name>
+	<description>Servicio de productos</description>
+
+3. Crear el Docker Compose desde el proyecto padre (docker-compose.yml):
+
+version: '3'
+services:
+  ### BD Inventario - PostgreSQL
+  db-inventory:
+    container_name: db-inventory
+    image: postgres:15.2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ms_inventory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Tr20010878
+    ports:
+      - 5431:5431
+    expose:
+      - 5431
+    command: -p 5431
+
+  ### MySQL database for Orders
+  db-orders:
+    container_name: db-orders
+    image: mysql:8.0.33
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ms_orders
+      MYSQL_USER: tinoreyna
+      MYSQL_PASSWORD: Tr20010878
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - 3306:3306
+    expose:
+      - 3306
+
+  ### Posgres database for Products
+  db-products:
+    container_name: db-products
+    image: postgres:15.2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ms_products
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Tr20010878
+    ports:
+      - 5433:5433
+    expose:
+      - 5433
+    command: -p 5433
+
+Ejecutar el proyecto desde la línea "services" para crear los contenedores.
+
+4. Definir las propiedades de cada aplicación (application.properties):
+
+inventory-service:
+
+server.port=8083
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.datasource.url=jdbc:postgresql://localhost:5431/ms_inventory
+spring.datasource.username=postgres
+spring.datasource.password=Tr20010878
+
+
+orders-service:
+
+server.port=8082
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.datasource.url=jdbc:mysql://localhost:3306/ms_orders
+spring.datasource.username=tinoreyna
+spring.datasource.password=Tr20010878
+
+
+products-service:
+
+server.port=8081
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.datasource.url=jdbc:postgresql://localhost:5433/ms_products
+spring.datasource.username=postgres
+spring.datasource.password=Tr20010878
+
+
+5. Definir la arquitectura de cada microservicio.
+Los paquetes se organizarían de la siguiente forma:
+
+- controllers
+- model
+  - dtos
+  - entities
+- repositories
+- services
+
+En el caso de Órdenes se tiene el paquete config con la clase WebClientConfig.
+En el caso de Inventario se agrega un paquete utils con la clase DataLoader.
+
+5. En entidades como órdenes se empleará una clase WebClientConfig para programación reactiva.
+
+package com.tinexlab.orders_service.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    public WebClient.Builder webClient() {
+        return WebClient.builder();
+    }
+}
+
+6. Características especiales:
+
+Órdenes:
+- Relación entre Order y OrderItems: 1-N
+
+7. Servicios en los microservicios:
+
+Inventario:
+public boolean isInStock(String sku)
+public BaseResponse areInStock(List<OrderItemRequest> orderItems)
+
+Orden:
+public void placeOrder(OrderRequest orderRequest)
+public List<OrderResponse> getAllOrders()
+private OrderResponse mapToOrderResponse(Order order)
+private OrderItemsResponse mapToOrderItemRequest(OrderItems orderItems)
+private OrderItems mapOrderItemRequestToOrderItem(OrderItemRequest orderItemRequest, Order order)
+
+Producto:
+public void addProduct(ProductRequest productRequest)
+public List<ProductResponse> getAllProducts()
+private ProductResponse mapToProductResponse(Product product)
+
+
+Segunda etapa - Integración de los microservicios por medio de Eureka Netflix y Spring Cloud Gateway
+----------------------------------------------------------------------------------------------------
+
+Se instalarán dos componentes importantes para la integración y comunicación de microservicios:
+
+- Spring Cloud Gateway: enrutamiento, seguridad, transformación de datos y control de tráfico.
+- Eureka Netflix: registro y descubrimiento de servicios confiables en todo el proyecto.
+
+1. Crear el proyecto api-gateway desde el Spring Initializr.
+
+Este proyecto debe tener las siguientes dependencias:
+
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Gateway
+
+Descomprimir el proyecto y colocarlo en el proyecto padre (microservices)
+
+2. Agregar en el pom.xml del proyecto padre:
+
+	<!--Los módulos que se crearon en Initializr-->
+	<modules>
+		<module>api-gateway</module> <!--agregar-->
+		<module>inventory-service</module>
+		<module>orders-service</module>
+		<module>products-service</module>
+	</modules>
+
+3. En el pom.xml del proyecto api-gateway, modificar el bloque parent:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+4. Del pom.xml de api-gateway, el bloque:
+
+	
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+debe ser cortado y trasladado al pom.xml del proyecto padre.
+
+Lo mismo con la propiedad:
+
+<spring-cloud.version>2022.0.4</spring-cloud.version>
+
+en el bloque properties.
+
+5. Configuración de API Gateway (Spring Cloud Gateway):
+
+En application.properties de API Gateway:
+
+spring.application.name=api-gateway
+server.port=8080
+spring.cloud.compatibility-verifier.enabled=false
+
+#Inventory service routes
+spring.cloud.gateway.routes[0].id=inventory-service
+spring.cloud.gateway.routes[0].uri=http://localhost:8083
+spring.cloud.gateway.routes[0].predicates[0]=Path=/api/inventory/**
+
+#Order service routes
+spring.cloud.gateway.routes[1].id=orders-service
+spring.cloud.gateway.routes[1].uri=http://localhost:8082
+spring.cloud.gateway.routes[1].predicates[0]=Path=/api/order/**
+
+#Product service routes
+spring.cloud.gateway.routes[2].id=products-service
+spring.cloud.gateway.routes[2].uri=http://localhost:8081
+spring.cloud.gateway.routes[2].predicates[0]=Path=/api/product/**
+
+Lo que contiene al momento es lo siguiente:
+
+- El nombre de la aplicación y su puerto para el API Gateway.
+- Los valores de enrutamiento según las ID de proyecto, host y puerto y la ruta coincidente con el endpoint definido en los controladores de cada microservicio.
+
+6. Cambiar el puerto a 8080 en todos los endpoints para que consuma el API Gateway.
+
+Por ejemplo:
+
+http://localhost:8083/api/inventory/000001
+
+pasaría a:
+
+http://localhost:8080/api/inventory/000001
+
+y debería dar el mismo resultado.
+
+La explicación de esto es que justamente el API Gateway concentra las rutas de cada microservicio, centralizándolas en un único dominio, lo cual solo haría variar el endpoint.
+
+Asimismo, editar en OrderService: .uri("http://localhost:8080/api/inventory/in-stock") (cambiando el puerto a 8080).
+
+7. Actualizar proyecto padre (Maven) y reiniciar los microservicios
+
+8. Configuración del servidor Eureka Netflix:
+
+8.1. Crear el servidor Eureka, esto es, otro proyecto desde Spring Initializr.
+
+Este proyecto debe tener las siguientes dependencias:
+
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Eureka Server
+
+Descomprimir el proyecto y colocarlo en el proyecto padre (microservices).
+
+8.2. Modificar el proyecto padre (microservices):
+
+	<modules>
+		<module>api-gateway</module>
+		<module>discovery-server</module> <!--agregar-->
+		<module>inventory-service</module>
+		<module>orders-service</module>
+		<module>products-service</module>
+	</modules>
+
+8.3. Modificar discovery-server:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+8.4. El repositorio Eureka:
+
+	<repositories>
+		<repository>
+			<id>spring-milestones</id>
+			<name>Spring Milestones</name>
+			<url>https://repo.spring.io/milestone</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+
+debe trasladarse al proyecto padre.
+
+8.5. Eliminar de discovery-server:
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+y:
+
+<spring-cloud.version>2022.0.4</spring-cloud.version>
+
+Esos valores ya existen en el proyecto padre.
+
+8.6. Actualizar proyecto padre (Maven).
+
+8.7. En el programa principal de discovery-server, agregar la anotación:
+
+package com.tinexlab.discovery_server;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.netflix.eureka.server.EnableEurekaServer;
+
+@SpringBootApplication
+@EnableEurekaServer // <------------ agregar
+public class DiscoveryServerApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(DiscoveryServerApplication.class, args);
+	}
+
+}
+
+8.8. En application.properties de discovery-server, anotar:
+
+spring.application.name=discovery-service
+server.port=8761
+spring.cloud.compatibility-verifier.enabled=false
+
+eureka.instance.hostname=localhost
+eureka.instance.prefer-ip-address=false
+
+eureka.client.register-with-eureka=false
+eureka.client.fetch-registry=false
+eureka.client.service-url.defaultZone=http://${eureka.instance.hostname}:${server.port}/eureka/
+
+9. Definir los clientes que acceden al servidor Eureka.
+
+9.1. Agregar la dependencia de Eureka client en los demás 4 proyectos:
+
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+
+9.2. En los archivos application.properties de cada proyecto, agregar:
+
+#Eureka client
+eureka.client.service-url.default-zone=http://localhost:8761/eureka
+eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+9.3. En application.properties de api-gateway, cambiar el host y puerto de cada ruta en duro por lb://.
+
+Por ejemplo, para inventory-service:
+
+http://localhost:8083
+
+pasará a ser:
+
+lb://inventory-service
+
+El prefijo "lb" indica la carga balanceada aplicada en cada servicio.
+
+Asimismo, en OrderService, cambiar:
+
+http://localhost:8080/api/inventory/in-stock
+
+por:
+
+lb://inventory-service/api/inventory/in-stock
+
+9.4. En WebClientConfig agregar la anotación @LoadBalanced:
+
+    @Bean
+    @LoadBalanced // < ------------------------ agregar
+    public WebClient.Builder webClient() {
+        return WebClient.builder();
+    }
+
+9.5. En los archivos application.properties de los microservicios de inventario, órdenes y productos, cambiar el valor de puerto a cero:
+
+server.port=0
+
+para que puedan levantarse múltiples instancias de cada microservicio en puertos aleatorios.
+
+9.6. En el archivo application.properties de api-gateway agregar:
+
+#Log
+logging.level.root=info
+logging.level.org.springframework.cloud.gateway=trace
+logging.level.org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator=info
+
+para el monitoreo de logs.
+
+9.7. En Run/Debug Configurations de IntelliJ IDEA, activar la opción para permitir ejecutar varias instancias de los microservicios de inventario, órdenes y productos.
+
+9.8. Agregar:
+
+spring.cloud.compatibility-verifier.enabled=false
+
+Si hay problemas de compatibilidad en casos de iniciar algún proyecto.
+
+9.9. Para monitorear los servicios balanceados con esta arquitectura construida al momento, se puede visualizar gráficamente en: http://localhost:8761
+
+En la consola de cada microservicio, se puede verificar que cada instancia activa aparece parecido a: "EurekaAutoServiceRegistration : Updating port to 64655", siendo el puerto un valor aleatorio.
+
+
+Tercera etapa - Seguridad y resiliencia + tolerancia a fallos
+-------------------------------------------------------------
+
+Se empleará seguridad para el proyecto construido al momento utilizando:
+
+- Spring Security: dependencia de seguridad de Spring que es capaz de manejar todos los mecanismos de seguridad que puede tener una aplicación: JWT, OAuth2, etc.
+- Keycloak: es un sistema completo gestor de seguridad por medio de configuraciones diversas. Opera dentro de la capa de seguridad interactuando con Spring Security en el api-gateway.
+- Resilience4j: es una dependencia de Spring para el control de fallas en la interoperatividad con el sistema. Puede adoptar varios criterios de control de flujos, siendo el más usado el de "circuit breaker".
+
+1. Agregar, en docker-compose.yml, la conexión a una base de datos para Keycloak:
+
+  ### Posgres database for Keycloak
+  db-keycloak:
+    container_name: db-keycloak
+    image: postgres:15.2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: db_keycloak
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Tr20010878
+    ports:
+      - 5434:5434
+    expose:
+      - 5434
+    command: -p 5434
+
+  ### Keycloak
+  keycloak:
+    container_name: keycloak
+    image: quay.io/keycloak/keycloak:21.0.2
+    command: ["start-dev"]
+    ports:
+      - 8181:8181
+    expose:
+      - 8181
+    depends_on:
+      - db-keycloak
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: db-keycloak
+      DB_DATABASE: db_keycloak
+      DB_PORT: 5434
+      DB_USER: postgres
+      DB_PASSWORD: Tr20010878
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: Tr20010878
+      KC_HTTP_PORT: 8181
+
+2. Acceder al sitio de administración de Keycloak: http://localhost:8181
+
+Click en Administration Console -> acceder a la ventana de administración con las credenciales definidas en el docker-compose.yml (keycloak).
+
+3. Crear un nuevo realm, el cual es un contenedor lógico que ayuda a la definición de valores de seguridad para el acceso y gestión de los microservicios.
+
+Click en master -> Create realm
+
+Asignar un nombre al realm, por ejemplo, microservices-realm
+
+Click en create.
+
+4. Luego de crear el realm, hay que personalizarlo. Click en Realm roles.
+
+Allí, crear dos roles: ADMIN y USER.
+
+5. Crear usuarios.
+
+admin_user
+Correo: admin_user@mail.com
+Ir a Credentials -> Set password -> asignarle clave y desmarcar la opción Temporary
+Ir a Role mapping -> asignarle los roles de ADMIN y USER
+
+basic_user
+Correo: basic_user@mail.com
+Se sigue los mismos pasos, excepto que solo debe asignársele el rol USER
+
+6. Definir un cliente para el realm, el cual es una aplicación o servicio registrado en un realm específico, facilitando la seguridad de los microservicios integrando Keycloak con los componentes del proyecto.
+
+Ir a Clients -> Create client:
+
+Client ID: microservices_client
+Name: Microservices Client
+Click en Next
+Escoger Client authentication y Authorization
+Escoger OAuth2
+Click en Next
+Asignar los siguientes URLs válidos:
+http://localhost:8080/*
+http://localhost:8080/login/oauth2/code/keycloak
+https://oauth.pstmn.io/v1/browser-callback (para probar en Postman)
+Web origins:
+/*
+
+Click en Save
+
+7. Agregar en API Gateway:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-client</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+En discovery-server:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+En los tres microservicios de inventario, órdenes y productos:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+8. Configurar los archivos application.properties de los proyectos:
+
+discovery-server (agregar):
+
+logging.level.org.springframework.web=debug
+logging.level.org.springframework.security=debug
+
+spring.security.user.name=eureka
+spring.security.user.password=password
+
+api-gateway (agregar):
+
+
+#Discovery Server routes
+spring.cloud.gateway.routes[3].id=discovery-service
+spring.cloud.gateway.routes[3].uri=http://localhost:8761
+spring.cloud.gateway.routes[3].predicates[0]=Path=/eureka/web
+spring.cloud.gateway.routes[3].filters[0]=SetPath=/
+
+#Discovery Server Static routes
+spring.cloud.gateway.routes[4].id=discovery-service-static
+spring.cloud.gateway.routes[4].uri=http://localhost:8761
+spring.cloud.gateway.routes[4].predicates[0]=Path=/eureka/**
+
+spring.cloud.gateway.default-filters[0]=SaveSession
+spring.cloud.gateway.default-filters[1]=TokenRelay
+
+#Keycloak
+
+spring.security.oauth2.client.provider.keycloak.issuer-uri=http://localhost:8181/realms/microservices-realm
+
+spring.security.oauth2.client.registration.keycloak.provider=keycloak
+spring.security.oauth2.client.registration.keycloak.scope=openid
+spring.security.oauth2.client.registration.keycloak.client-id=microservices_client
+spring.security.oauth2.client.registration.keycloak.client-secret=BUYXeuMZ7fUUWUbReTjMEn6ul9jDMuVq
+spring.security.oauth2.client.registration.keycloak.authorization-grant-type=authorization_code
+spring.security.oauth2.client.registration.keycloak.redirect-uri={baseUrl}/login/oauth2/code/keycloak
+
+El valor de client-secret debe obtenerse desde la sección Credentials del cliente, en este caso, microservices_client.
+
+
+inventory-service:
+
+Cambiar lo siguiente:
+
+eureka.client.service-url.default-zone=http://eureka:password@localhost:8761/eureka
+
+Agregar:
+
+#Keycloak
+spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:8181/realms/microservices-realm/protocol/openid-connect/certs
+
+El enlace de Keycloak se obtiene en uno de los endpoints de Realm settings.
+
+Estos dos cambios deben efectuarse en los demás microservicios.
+
+9. Crear en todos los proyectos la clase SecurityConfig dentro de un paquete config de la siguiente manera:
+
+Para inventory-service, orders-service y products-service:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf().disable()
+                .securityMatcher("/**").authorizeHttpRequests().anyRequest().authenticated()
+                .and()
+                .oauth2ResourceServer(configure -> configure.jwt().jwtAuthenticationConverter(jwtAuthConverter()));
+
+
+        return http.build();
+    }
+
+    private Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+
+        return converter;
+    }
+}
+
+@SuppressWarnings("unchecked")
+class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>>{
+    @Override
+    public Collection<GrantedAuthority> convert(Jwt jwt) {
+        if (jwt.getClaims() == null){
+            return List.of();
+        }
+
+        final Map<String, List<String>> realmAccess = (Map<String, List<String>>) jwt.getClaims().get("realm_access");
+
+        return realmAccess.get("roles").stream()
+                .map(roleName -> "ROLE_" + roleName)
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+    }
+}
+
+Para discovery-server:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf().disable();
+        return http.build();
+    }
+}
+
+Para api-gateway:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+        http
+                .csrf().disable()
+                .authorizeExchange().anyExchange().authenticated()
+                .and()
+                .oauth2Login();
+
+        return http.build();
+    }
+
+}
+
+10. Instalar en el navegador la extensión Postman Interceptor.
+
+11. Configurar Postman
+
+Ir a Authorization
+Tipo OAuth2
+Token name: kc_token
+Callback URL: http://localhost:8080/login/oauth2/code/keycloak
+Auth URL: http://localhost:8181/realms/microservices-realm/protocol/openid-connect/auth
+Access token URL: http://localhost:8181/realms/microservices-realm/protocol/openid-connect/token
+Client ID: microservices_client
+Client secret: lo que aparece en Credentials
+Scope: openid
+
+Click en cookies, después:
+
+- Agregar en Cookies el dominio localhost como permitido.
+- En Sync Cookies, Interceptor, agregar localhost.
+- Sincronizar y verificar en la pestaña anterior las cookies que se están sincronizando.
+
+Click en Get new access token:
+
+- Para acceder a microservices-realm, lo hacemos con el usuario admin_user y su clave.
+- Si el login es exitoso, click en Proceed y en Use token.
+
+12. En el WebClientconfig de orders-service, modificar:
+
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.server.resource.web.reactive.function.client.ServletBearerExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    @LoadBalanced
+    public WebClient.Builder webClient() {
+        return WebClient.builder().filter(new ServletBearerExchangeFilterFunction()); // <-----
+    }
+}
+
+13. Limitar el acceso en el microservicio de productos en ProductController:
+
+import com.uncledavecode.products_service.model.dtos.ProductRequest;
+import com.uncledavecode.products_service.model.dtos.ProductResponse;
+import com.uncledavecode.products_service.services.ProductService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/product")
+@RequiredArgsConstructor
+public class ProductController {
+
+    private final ProductService productService;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
+    public void addProduct(@RequestBody ProductRequest productRequest) {
+        this.productService.addProduct(productRequest);
+    }
+
+    @GetMapping
+    @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasRole('ROLE_USER')")
+    public List<ProductResponse> getAllProducts() {
+        return this.productService.getAllProducts();
+    }
+}
+
+Queda pendiente configurar la resiliencia y tolerancia a fallos.
+
+14. Instalar Resilience4j en las dependencias.
+
+En orders-service:
+
+pom.xml:
+
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+		
+application.properties:
+
+#Actuator
+management.endpoints.web.exposure.include=health
+management.endpoints.web.base-path=/actuator/orders
+management.endpoint.health.show-details=always
+management.health.circuitbreakers.enabled=true
+
+#Resilience4j - Circuit Breaker
+resilience4j.circuitbreaker.instances.orders-service.register-health-indicator=true
+resilience4j.circuitbreaker.instances.orders-service.sliding-window-size=5
+resilience4j.circuitbreaker.instances.orders-service.sliding-window-type=count_based
+resilience4j.circuitbreaker.instances.orders-service.failure-rate-threshold=50
+resilience4j.circuitbreaker.instances.orders-service.wait-duration-in-open-state=10s
+resilience4j.circuitbreaker.instances.orders-service.automatic-transition-from-open-to-half-open-enabled=true
+resilience4j.circuitbreaker.instances.orders-service.permitted-number-of-calls-in-half-open-state=3
+
+El último bloque configura Resilience4j bajo el patrón circuit breaker y se otorga los parámetros para el control de la tolerancia a los fallos, basado en umbral, tipo de medición y las transiciones de estado.
+
+En inventory-service:
+
+application.properties:
+
+#Actuator
+management.endpoints.web.exposure.include=health
+management.endpoints.web.base-path=/actuator/inventory
+
+En products-service:
+
+application.properties:
+
+#Actuator
+management.endpoints.web.exposure.include=health
+management.endpoints.web.base-path=/actuator/products
+
+En api-gateway:
+
+application.properties:
+
+#Actuator
+management.endpoints.web.exposure.include=health
+management.endpoints.web.base-path=/actuator
+
+Agregar también las rutas de Actuator:
+
+
+#Actuator routes
+#Inventory actuator routes
+spring.cloud.gateway.routes[5].id=inventory-service-actuator
+spring.cloud.gateway.routes[5].uri=lb://inventory-service/actuator/inventory/**
+spring.cloud.gateway.routes[5].predicates[0]=Path=/actuator/inventory/**
+
+#Orders actuator routes
+spring.cloud.gateway.routes[6].id=orders-service-actuator
+spring.cloud.gateway.routes[6].uri=lb://orders-service/actuator/orders/**
+spring.cloud.gateway.routes[6].predicates[0]=Path=/actuator/orders/**
+
+#Products actuator routes
+spring.cloud.gateway.routes[7].id=products-service-actuator
+spring.cloud.gateway.routes[7].uri=lb://products-service/actuator/products/**
+spring.cloud.gateway.routes[7].predicates[0]=Path=/actuator/products/**
+
+
+
+Modificar OrderController:
+
+@RestController
+@RequestMapping("/api/order")
+@RequiredArgsConstructor
+public class OrderController {
+
+    private final OrderService orderService;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @CircuitBreaker(name = "orders-service", fallbackMethod = "placeOrderFallback")
+    public ResponseEntity<OrderResponse> placeOrder(@RequestBody OrderRequest orderRequest) {
+        var orders = this.orderService.placeOrder(orderRequest);
+        return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping
+    @ResponseStatus(HttpStatus.OK)
+    public List<OrderResponse> getOrders() {
+        return this.orderService.getAllOrders();
+    }
+
+    private ResponseEntity<OrderResponse> placeOrderFallback(OrderRequest orderRequest, Throwable throwable) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+}
+
+y también OrderService:
+
+import com.uncledavecode.orders_service.model.dtos.*;
+import com.uncledavecode.orders_service.model.entities.Order;
+import com.uncledavecode.orders_service.model.entities.OrderItems;
+import com.uncledavecode.orders_service.repositories.OrderRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final WebClient.Builder webClientBuilder;
+
+    public OrderResponse placeOrder(OrderRequest orderRequest) {
+
+        //Check for inventory
+        BaseResponse result = this.webClientBuilder.build()
+                .post()
+                .uri("lb://inventory-service/api/inventory/in-stock")
+                .bodyValue(orderRequest.getOrderItems())
+                .retrieve()
+                .bodyToMono(BaseResponse.class)
+                .block();
+        if (result != null && !result.hasErrors()) {
+            Order order = new Order();
+            order.setOrderNumber(UUID.randomUUID().toString());
+            order.setOrderItems(orderRequest.getOrderItems().stream()
+                    .map(orderItemRequest -> mapOrderItemRequestToOrderItem(orderItemRequest, order))
+                    .toList());
+            var savedOrder = this.orderRepository.save(order);
+            return mapToOrderResponse(savedOrder);
+        } else {
+            throw new IllegalArgumentException("Some of the products are not in stock");
+        }
+    }
+
+    public List<OrderResponse> getAllOrders() {
+        List<Order> orders = this.orderRepository.findAll();
+
+        return orders.stream().map(this::mapToOrderResponse).toList();
+
+    }
+
+    private OrderResponse mapToOrderResponse(Order order) {
+        return new OrderResponse(order.getId(), order.getOrderNumber()
+                , order.getOrderItems().stream().map(this::mapToOrderItemRequest).toList());
+    }
+
+    private OrderItemsResponse mapToOrderItemRequest(OrderItems orderItems) {
+        return new OrderItemsResponse(orderItems.getId(), orderItems.getSku(), orderItems.getPrice(), orderItems.getQuantity());
+    }
+
+    private OrderItems mapOrderItemRequestToOrderItem(OrderItemRequest orderItemRequest, Order order) {
+        return OrderItems.builder()
+                .id(orderItemRequest.getId())
+                .sku(orderItemRequest.getSku())
+                .price(orderItemRequest.getPrice())
+                .quantity(orderItemRequest.getQuantity())
+                .order(order)
+                .build();
+    }
+}
+
+Probar los microservicios y monitorearlos con las ventanas de Actuator definidas en las rutas.
+
+Se puede verificar el tema de las fallas para los cambios de estado del patrón circuit breaker:
+
+Cerrado (estado inicial)
+-> supera umbral de errores
+Abierto (notifica que se produjo un error al superar el umbral)
+-> supera umbral de respuestas exitosas
+Semiabierto (respuestas controladas)
+-> supera umbral de respuestas en este estado
+-> vuelbe a Cerrado
+
+
+
+Cuarta etapa - comunicación entre microservicios por notificaciones usando Apache Kafka
+---------------------------------------------------------------------------------------
+
+Apache Kafka es una implementación que favorece la comunicación asíncrona entre un conjunto de multiservicios, o sea, trabaja sobre una generación de colas de mensajes que son distribuidas bajo el patrón de diseño productor-consumidor.
+
+1. Crear un módulo nuevo llamado notification-service, el cual tiene las siguientes dependencias:
+
+- Spring Boot DevTools
+- Lombok
+- Spring Configuration Processor
+- Spring Web
+- Spring Boot Actuator
+- Eureka Discovery Client
+- Spring for Apache Kafka
+
+Generarlo, descargarlo y descomprimir la carpeta junto con los demás módulos del proyecto microservices.
+
+2. Actualizar la versión de Spring Boot del proyecto padre a 3.1.0:
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.1.0</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+También actualizar la versión de Spring Cloud a la 2022.0.3:
+
+	<properties>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<spring-cloud.version>2022.0.3</spring-cloud.version> <!--tomado de API Gateway y Eureka server-->
+	</properties>
+
+Agregar el módulo notification-service:
+
+	<!--Los módulos que se crearon en Initializr-->
+	<modules>
+		<module>api-gateway</module>
+		<module>discovery-server</module>
+		<module>inventory-service</module>
+		<module>orders-service</module>
+		<module>products-service</module>
+		<module>notification-service</module>
+	</modules>
+
+3. En notification-service modificar:
+
+	<parent>
+		<groupId>com.tinexlab</groupId>
+		<artifactId>microservices</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>notification-service</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>notification-service</name>
+	<description>Servicio de notificaciones</description>
+
+	<properties>
+		<java.version>17</java.version>
+	</properties>
+
+Asimismo, borrar los bloques dependencyManagement y repositories, el cual ya existe en el proyecto padre.
+
+4. En el docker-compose.yml agregaremos los elementos correspondientes a Apache Kafka:
+
+  ### Zookeeper
+  zookeeper:
+    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  ### Kafka
+  kafka:
+    container_name: kafka
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+5. Crear los contenedores recién inscritos en docker-compose.yml.
+
+6. En orders-service, como ejemplo, agregar la dependencia de Apache Kafka (pom.xml):
+
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
+
+Ello implica que se creará notificaciones de órdenes con el siguiente desarrollo que se hará en este módulo.
+
+Actualizar las dependencias de Maven.
+
+En el archivo application.properties de este módulo se agregarán las siguientes propiedades:
+
+#Kafka
+spring.kafka.bootstrap-servers=localhost:9092
+spring.kafka.producer.retries=1
+spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer
+
+7. Agregar un enum en el paquete model de orders-service:
+
+package com.tinexlab.orders_service.model.enums;
+
+public enum OrderStatus {
+    PLACED,
+    CANCELLED,
+    SHIPPED,
+    DELIVERED
+}
+
+8. Crear un record dentro de un paquete events de orders-service:
+
+package com.tinexlab.orders_service.events;
+
+import com.tinexlab.orders_service.model.enums.OrderStatus;
+
+public record OrderEvent(String orderNumber, int itemsCount, OrderStatus orderStatus) {
+}
+
+9. Modificar OrderService:
+
+package com.tinexlab.orders_service.services;
+
+import com.tinexlab.orders_service.events.OrderEvent;
+import com.tinexlab.orders_service.model.dtos.*;
+import com.tinexlab.orders_service.model.entities.Order;
+import com.tinexlab.orders_service.model.entities.OrderItems;
+import com.tinexlab.orders_service.model.enums.OrderStatus;
+import com.tinexlab.orders_service.repositories.OrderRepository;
+import com.tinexlab.orders_service.utils.JsonUtils;
+import lombok.RequiredArgsConstructor;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final WebClient.Builder webClientBuilder;
+    private final KafkaTemplate<String, String> kafkaTemplate; // agregar
+
+    public OrderResponse placeOrder(OrderRequest orderRequest) {
+
+        //Check for inventory
+        BaseResponse result = this.webClientBuilder.build()
+                .post()
+                .uri("lb://inventory-service/api/inventory/in-stock")
+                .bodyValue(orderRequest.getOrderItems())
+                .retrieve()
+                .bodyToMono(BaseResponse.class)
+                .block();
+        if (result != null && !result.hasErrors()) {
+            Order order = new Order();
+            order.setOrderNumber(UUID.randomUUID().toString());
+            order.setOrderItems(orderRequest.getOrderItems().stream()
+                    .map(orderItemRequest -> mapOrderItemRequestToOrderItem(orderItemRequest, order))
+                    .toList());
+            var savedOrder = this.orderRepository.save(order);
+            //TODO: Send message to order topic
+            this.kafkaTemplate.send("orders-topic", JsonUtils.toJson(
+                    new OrderEvent(savedOrder.getOrderNumber(), savedOrder.getOrderItems().size(), OrderStatus.PLACED)
+            )); // agregar
+            return mapToOrderResponse(savedOrder);
+        } else {
+            throw new IllegalArgumentException("Some of the products are not in stock");
+        }
+    }
+
+    public List<OrderResponse> getAllOrders() {
+        List<Order> orders = this.orderRepository.findAll();
+
+        return orders.stream().map(this::mapToOrderResponse).toList();
+
+    }
+
+    private OrderResponse mapToOrderResponse(Order order) {
+        return new OrderResponse(order.getId(), order.getOrderNumber()
+                , order.getOrderItems().stream().map(this::mapToOrderItemRequest).toList());
+    }
+
+    private OrderItemsResponse mapToOrderItemRequest(OrderItems orderItems) {
+        return new OrderItemsResponse(orderItems.getId(), orderItems.getSku(), orderItems.getPrice(), orderItems.getQuantity());
+    }
+
+    private OrderItems mapOrderItemRequestToOrderItem(OrderItemRequest orderItemRequest, Order order) {
+        return OrderItems.builder()
+                .id(orderItemRequest.getId())
+                .sku(orderItemRequest.getSku())
+                .price(orderItemRequest.getPrice())
+                .quantity(orderItemRequest.getQuantity())
+                .order(order)
+                .build();
+    }
+}
+
+10. Microservicio de notificaciones (notification-service):
+
+Editar application.properties:
+
+spring.application.name=notification-service
+
+server.port=0
+
+
+#Eureka client
+eureka.client.service-url.default-zone=http://eureka:password@localhost:8761/eureka
+eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+#Actuator
+management.endpoints.web.exposure.include=health
+management.endpoints.web.base-path=/actuator/notifications
+
+#Kafka
+spring.kafka.bootstrap-servers=localhost:9092
+spring.kafka.consumer.group-id=notification-service
+spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+
+
+Copiar OrderEvent, OrderStatus y JsonUtils de orders-service a notification-service y crear una clase listeners.OrderEventListener:
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+
+@Component
+@Slf4j
+public class OrderEventListener {
+
+    @KafkaListener(topics = "orders-topic")
+    public void handleOrdersNotifications(String message) {
+        var orderEvent = JsonUtils.fromJson(message, OrderEvent.class);
+
+        //Send email to customer, send SMS to customer, etc.
+        //Notify another service...
+
+        log.info("Order {} event received for order : {} with {} items", orderEvent.orderStatus(), orderEvent.orderNumber(), orderEvent.itemsCount());
+    }
+}
+
+
+
+Quinta etapa - Rastreo, monitoreo y trazabilidad de los microservicios creados
+------------------------------------------------------------------------------
+
+Se implementará:
+
+- Zipkin: permite monitorear las interacciones entre microservicios.
+- Micrometer: verifica el rendimiento de todo el sistema por medio de métricas.
+- Prometheus: visualiza las métricas estudiadas a través de Micrometer.
+- Grafana: genera un dashboard del desempeño del sistema con base en los valores obtenidos en los plugins anteriores.
+
+Paso previo: actualizar Spring Boot:
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.1.2</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+
+1. Agregar en docker-compose:
+
+  ### Zipkin
+  zipkin:
+    container_name: zipkin
+    image: openzipkin/zipkin:2.24.2
+    ports:
+      - "9411:9411"
+
+Levantar los contenedores.
+
+2. En api-gateway, inventory-service, orders-service y products-service agregar las siguientes dependencias:
+
+		<!--Tracing-->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-tracing-bridge-brave</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.zipkin.reporter2</groupId>
+			<artifactId>zipkin-reporter-brave</artifactId>
+		</dependency>
+
+En api-gateway, discovery-server, inventory-service, orders-service y products-service application.properties agregar lo siguiente:
+
+#Tracing
+management.zipkin.tracing.endpoint=http://localhost:9411/api/v2/spans
+management.tracing.sampling.probability=1.0
+
+logging.pattern.level= %5p [${spring.application.name}, %X{traceId:-}, %X{spanId:-}]
+
+En inventory-service, orders-service y products-service agregar:
+
+logging.level.root=debug
+
+3. En OrderService modificar:
+
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final WebClient.Builder webClientBuilder;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObservationRegistry observationRegistry; // <--------------- agregar
+
+    public OrderResponse placeOrder(OrderRequest orderRequest) {
+
+        Observation inventoryObservation = Observation.createNotStarted("inventory-service", observationRegistry); // <--------------- agregar
+        //Check for inventory
+        return inventoryObservation.observe(() -> {  // <--------------- agregar
+            BaseResponse result = this.webClientBuilder.build()
+                    .post()
+                    .uri("lb://inventory-service/api/inventory/in-stock")
+                    .bodyValue(orderRequest.getOrderItems())
+                    .retrieve()
+                    .bodyToMono(BaseResponse.class)
+                    .block();
+            if (result != null && !result.hasErrors()) {
+                Order order = new Order();
+                order.setOrderNumber(UUID.randomUUID().toString());
+                order.setOrderItems(orderRequest.getOrderItems().stream()
+                        .map(orderItemRequest -> mapOrderItemRequestToOrderItem(orderItemRequest, order))
+                        .toList());
+                var savedOrder = this.orderRepository.save(order);
+                //TODO: Send message to order topic
+                this.kafkaTemplate.send("orders-topic", JsonUtils.toJson(
+                        new OrderEvent(savedOrder.getOrderNumber(), savedOrder.getOrderItems().size(), OrderStatus.PLACED)
+                ));
+                return mapToOrderResponse(savedOrder);
+            } else {
+                throw new IllegalArgumentException("Some of the products are not in stock");
+            }
+        });  // <--------------- agregar
+    }
+
+    // ...
+}
+
+4. Modificar WebClientConfig:
+
+import io.micrometer.observation.ObservationRegistry;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.server.resource.web.reactive.function.client.ServletBearerExchangeFilterFunction;
+import org.springframework.web.reactive.function.client.DefaultClientRequestObservationConvention;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    @LoadBalanced
+    public WebClient.Builder webClientBuilder(ObservationRegistry observationRegistry) {
+        return WebClient.builder()
+                .filter(new ServletBearerExchangeFilterFunction())
+                .observationRegistry(observationRegistry)
+                .observationConvention(new DefaultClientRequestObservationConvention());
+    }
+
+    @Bean
+    public WebClient webClient(WebClient.Builder builder) {
+        return builder.build();
+    }
+}
+
+5. Ir a docker-compose para configurar Prometheus:
+
+
+  ### Prometheus
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.46.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./files/prometheus.yml:/etc/prometheus/prometheus.yml
+
+Crear una carpeta files y crear el archivo prometheus.yml con el siguiente contenido:
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: 'products-service'
+    metrics_path: '/actuator/products/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          application: 'Product Service'
+  - job_name: 'orders-service'
+    metrics_path: '/actuator/orders/prometheus'
+    static_configs:
+      - targets: [ 'host.docker.internal:8080' ]
+        labels:
+          application: 'Order Service'
+  - job_name: 'inventory-service'
+    metrics_path: '/actuator/inventory/prometheus'
+    static_configs:
+      - targets: [ 'host.docker.internal:8080' ]
+        labels:
+          application: 'Inventory Service'
+
+6. Agregar en api-gateway, en application.properties, lo siguiente:
+
+
+#Discovery actuator routes
+spring.cloud.gateway.routes[8].id=discovery-service-actuator
+spring.cloud.gateway.routes[8].uri=http://localhost:8761/actuator/discovery/**
+spring.cloud.gateway.routes[8].predicates[0]=Path=/actuator/discovery/**
+
+Modificar:
+
+#Actuator
+management.endpoints.web.exposure.include=health,prometheus
+
+En discovery-server agregar:
+
+# Prometheus
+management.endpoints.web.exposure.include=health,prometheus
+management.endpoints.web.base-path=/actuator/discovery
+
+En inventory-service, notification-service, orders-service y products-service modificar:
+
+management.endpoints.web.exposure.include=health,prometheus
+
+7. Cambiar las clases SecurityConfig debido al cambio de versión de Spring Boot y Spring Security:
+
+api-gateway:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+        http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .authorizeExchange(auth -> {
+                    auth.pathMatchers("/actuator/**").permitAll();
+                    auth.anyExchange().authenticated();
+                })
+                .oauth2Login(Customizer.withDefaults());
+
+        return http.build();
+    }
+}
+
+discovery-server:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable);
+        return http.build();
+    }
+}
+
+inventory-service:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth ->
+                        auth.requestMatchers(request ->
+                                        request.getRequestURI().contains("/actuator/inventory")).permitAll()
+                                .anyRequest().authenticated())
+                .oauth2ResourceServer(configure -> configure.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())));
+
+        return http.build();
+    }
+
+    private Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+
+        return converter;
+    }
+}
+
+@SuppressWarnings("unchecked")
+class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>>{
+    @Override
+    public Collection<GrantedAuthority> convert(Jwt jwt) {
+        if (jwt.getClaims() == null){
+            return List.of();
+        }
+
+        final Map<String, List<String>> realmAccess = (Map<String, List<String>>) jwt.getClaims().get("realm_access");
+
+        return realmAccess.get("roles").stream()
+                .map(roleName -> "ROLE_" + roleName)
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+    }
+}
+
+orders-service:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth ->
+                        auth.requestMatchers(request ->
+                                        request.getRequestURI().contains("/actuator/order")).permitAll()
+                                .anyRequest().authenticated())
+                .oauth2ResourceServer(configure -> configure.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())));
+
+        return http.build();
+    }
+
+    private Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+
+        return converter;
+    }
+}
+
+@SuppressWarnings("unchecked")
+class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>>{
+    @Override
+    public Collection<GrantedAuthority> convert(Jwt jwt) {
+        if (jwt.getClaims() == null){
+            return List.of();
+        }
+
+        final Map<String, List<String>> realmAccess = (Map<String, List<String>>) jwt.getClaims().get("realm_access");
+
+        return realmAccess.get("roles").stream()
+                .map(roleName -> "ROLE_" + roleName)
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+    }
+}
+
+products-service:
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth ->
+                        auth.requestMatchers(request ->
+                                        request.getRequestURI().contains("/actuator/products")).permitAll()
+                                .anyRequest().authenticated())
+                .oauth2ResourceServer(configure -> configure.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())));
+
+        return http.build();
+    }
+
+    private Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+
+        return converter;
+    }
+}
+
+@SuppressWarnings("unchecked")
+class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>>{
+        @Override
+        public Collection<GrantedAuthority> convert(Jwt jwt) {
+            if (jwt.getClaims() == null){
+                return List.of();
+            }
+
+            final Map<String, List<String>> realmAccess = (Map<String, List<String>>) jwt.getClaims().get("realm_access");
+
+            return realmAccess.get("roles").stream()
+                    .map(roleName -> "ROLE_" + roleName)
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList());
+        }
+}
+
+8. Instalar Grafana:
+
+docker-compose.yml:
+
+
+  ### Grafana
+  grafana:
+    container_name: grafana
+    image: grafana/grafana-oss:10.0.3
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    links:
+      - prometheus
+    volumes:
+      - ./files/grafana:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: Tr20010878
+    depends_on:
+      - prometheus
+
+
+
+
+
+

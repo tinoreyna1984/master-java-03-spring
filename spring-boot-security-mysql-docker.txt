@@ -1394,6 +1394,10 @@ Iniciar contenedor
 ------------------
 docker-compose start
 
+Reniciar contenedor
+------------------
+docker-compose restart
+
 
 
 
