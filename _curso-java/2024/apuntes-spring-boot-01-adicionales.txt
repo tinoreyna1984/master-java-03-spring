@@ -1,0 +1,288 @@
+Spring Framework y Spring Boot (2024)
+*************************************
+
+Controladores
+=============
+
+REST
+----
+
+package com.andres.curso.springboot.webapp.springbootweb.controllers;
+
+// import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.andres.curso.springboot.webapp.springbootweb.models.User;
+import com.andres.curso.springboot.webapp.springbootweb.models.dto.UserDto;
+
+@RestController
+@RequestMapping("/api")
+public class UserRestController {
+    
+    @GetMapping(path="/details")
+    public UserDto details() {
+
+        User user = new User("Andres", "Guzman");
+
+        UserDto userDto = new UserDto();
+        userDto.setUser(user);
+        userDto.setTitle("Hola Mundo Spring Boot");
+
+        return userDto;
+    }
+    
+    @GetMapping("/list")
+    public List<User> list() {
+        User user = new User("Andres", "Guzman");
+        User user2 = new User("Pepe", "Doe");
+        User user3 = new User("Jhon", "Doe");
+
+        List<User> users = Arrays.asList(user, user2, user3);
+        // List<User> users = new ArrayList<>();
+        // users.add(user);
+        // users.add(user2);
+        // users.add(user3);
+
+        return users;
+    }
+    
+    @GetMapping(path = "/details-map")
+    public Map<String, Object> detailsMap() {
+
+        User user = new User("Andres", "Guzman");
+        Map<String, Object> body = new HashMap<>();
+
+        body.put("title", "Hola Mundo Spring Boot");
+        body.put("user", user);
+        return body;
+    }
+
+}
+
+Para MVC
+--------
+
+package com.andres.curso.springboot.webapp.springbootweb.controllers;
+
+import java.util.Arrays;
+import java.util.List;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.ui.ModelMap;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+
+import com.andres.curso.springboot.webapp.springbootweb.models.User;
+
+@Controller
+public class UserController {
+
+    @GetMapping("/details")
+    public String details(Model model) {
+
+        User user = new User("Andres", "Guzman");
+        user.setEmail("andres@correo.com");
+        model.addAttribute("title", "Hola Mundo Spring Boot");
+        model.addAttribute("user", user);
+        return "details";
+    }
+
+    @GetMapping("/list")
+    public String list(ModelMap model) {
+        model.addAttribute("title", "Listado de usuarios!");
+        return "list";
+    }
+    
+    @ModelAttribute("users")
+    public List<User> usersModel() {
+        return Arrays.asList(
+                new User("Pepa", "Gonzalez"),
+                new User("Lalo", "Perez", "lalo@correo.com"),
+                new User("Juanita", "Roe", "juana@correo.com"),
+                new User("Andres", "Doe"));
+    }
+
+}
+
+Vista con Thymeleaf
+===================
+
+Desde controlador:
+
+    @GetMapping("/details")
+    public String details(Model model) {
+
+        User user = new User("Andres", "Guzman");
+        user.setEmail("andres@correo.com");
+        model.addAttribute("title", "Hola Mundo Spring Boot");
+        model.addAttribute("user", user);
+        return "details";
+    }
+
+Desde resources/templates:
+
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Document</title>
+</head>
+
+<body>
+    <h1 th:text="${title}"></h1>
+    <ul>
+        <li th:text="${user.name}"></li>
+        <li th:text="${user.lastname}"></li>
+        <li th:if="${user.email}" th:text="${user.email}"></li>
+        <li th:if="${user.email == null}" th:text="${'no tiene email'}"></li>
+    </ul>
+    <a th:href="@{/list}">ver listado</a><br>
+    <a th:href="@{/api/params/foo?message=Hola que tal festival}">ver mensaje</a><br>
+    <a th:href="@{/api/params/foo(message='Hola que tal festival')}">ver mensaje 2</a><br>
+    <a th:href="@{/api/params/bar(text='Hola que tal festival', code=32323)}">ver bar mix 2 param</a><br>
+    <a th:href="@{'/api/var/baz/' + ${title}}">ver var path variable</a><br>
+    <a th:href="@{'/api/var/baz/' + 'Hola que tal festival'}">ver var path variable 2</a><br>
+</body>
+
+</html>
+
+
+Configuración de un archivo properties diferente
+================================================
+
+package com.andres.curso.springboot.webapp.springbootweb;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.context.annotation.PropertySources;
+
+@Configuration
+@PropertySources({
+        @PropertySource(value="classpath:values.properties", encoding = "UTF-8"),
+})
+public class ValuesConfig {
+    
+}
+
+Archivo values.properties:
+
+config.code=23232
+config.username=jonas
+config.message=Hola que tal como esta Ã¡Ã©Ã±Ã±Ã±Ã±
+config.listOfValues=hola,que,tal,hoy
+config.valuesMap={product: 'Cpu Intel Core i7 12th', description: 'Alder Lake, 12 core, a 5 GHz', price: '1000'}
+
+Acceso a valores de values.properties:
+
+    @Value("${config.code}")
+    private Integer code;
+
+Spring Expression Language (SPEL)
+=================================
+
+    
+    @Value("#{'${config.listOfValues}'.toUpperCase().split(',')}")
+    private List<String> valueList;
+
+    @Value("#{'${config.listOfValues}'.toUpperCase()}")
+    private String valueString;
+
+Permite programar sobre el manejo de valores procedentes del archivo de configuración.
+
+
+Inyección de la clase Environment
+=================================
+
+En la clase:
+
+    @Autowired
+    private Environment environment;
+    
+En el método de la clase:
+
+    @GetMapping("/values")
+    public Map<String, Object> values(@Value("${config.message}") String message) {
+        Long code2 = environment.getProperty("config.code", Long.class);
+        
+        Map<String, Object> json = new HashMap<>();
+        json.put("username", username);
+        json.put("code", code);
+        json.put("message", message);
+        json.put("message2", environment.getProperty("config.message"));
+        json.put("code2", code2);
+        json.put("listOfValues", listOfValues);
+        json.put("valueString", valueString);
+        json.put("valueList", valueList);
+        json.put("valueMap", valuesMap);
+        json.put("product", product);
+        json.put("price", price);
+        return json;
+    }
+
+El Environment está asociado con el archivo de configuración values.properties y la configuración ValuesConfig efectuada previamente.
+
+Redirect y Forward
+==================
+
+package com.andres.curso.springboot.webapp.springbootweb.controllers;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class HomeController {
+    
+    @GetMapping({"", "/", "/home"})
+    public String home() {
+
+        return "redirect:/list";
+        // return "forward:/list";
+    }
+}
+
+Se emplean para el cambio de vista según los conceptos de redirect (enviar un código HTTP 300 con la url de redirección al cliente para que éste haga un nuevo request desde ahí) y forward (la resolución se hace únicamente desde el servidor).
+
+Enlaces en Thymeleaf (href)
+===========================
+
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Document</title>
+</head>
+
+<body>
+    <!-- ... -->
+    <a th:href="@{/list}">ver listado</a><br>
+    <a th:href="@{/api/params/foo?message=Hola que tal festival}">ver mensaje</a><br>
+    <a th:href="@{/api/params/foo(message='Hola que tal festival')}">ver mensaje 2</a><br>
+    <a th:href="@{/api/params/bar(text='Hola que tal festival', code=32323)}">ver bar mix 2 param</a><br>
+    <a th:href="@{'/api/var/baz/' + ${title}}">ver var path variable</a><br>
+    <a th:href="@{'/api/var/baz/' + 'Hola que tal festival'}">ver var path variable 2</a><br>
+</body>
+
+</html>
+
+
+
+
+
+
+
+
+
