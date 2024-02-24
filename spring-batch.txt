@@ -1,0 +1,623 @@
+Spring Batch
+************
+
+Herramienta de procesamiento masivo de datos desde Spring Framework.
+
+
+Conceptos clave
+===============
+* Job: elemento base de ejecución del proceso en lotes.
+* Step: cada paso dentro del job, el cual da tratamiento al lote de datos.
+
+Aplicación de los conceptos
+---------------------------
+* Job: recibir una petición HTTP o una ejecución de un programa en batch que lea un archivo comprimido, descomprima el archivo, extraiga sus datos, transforme los datos (si aplica) y coloque dicho lote de datos en tablas de BBDD.
+* Steps:
+1. Descomprimir archivo.
+2. Leer archivo.
+3. Procesar datos.
+4. Grabar en tablas de BBDD.
+
+
+Crear proyecto Spring Batch (con Spring 2.7.10)
+===============================================
+
+Dependencias
+------------
+
+* Spring Batch
+* Spring Web
+* Spring Data JPA
+* Dependencia para el motor de base de datos
+* Otras dependencias como Lombok, DevTools, etc.
+
+Archivo pom.xml
+---------------
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.10</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.batch</groupId>
+    <artifactId>SpringBatchApplication</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>SpringBatchApplication</name>
+    <description>Spring Batch Application</description>
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+    <dependencies>
+
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.7.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.21</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-batch</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.batch</groupId>
+            <artifactId>spring-batch-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+
+Desarrollo de la arquitectura y configuración
+=============================================
+
+* Entidades
+* Servicios
+* Controladores
+* Configuración del Spring Batch.
+
+Configuración adicional (application.properties)
+------------------------------------------------
+
+# servidor de BBDD
+spring.batch.job.enabled=false
+spring.jpa.hibernate.ddl-auto = update
+
+spring.servlet.multipart.enabled=true
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
+
+
+Dos tipos de aplicaciones con Spring Batch
+==========================================
+
+* Tasklet: forma convencional donde se trabaja con el conjunto entero de datos y se procesa un registro a la vez en todos los pasos.
+* Chunk: trabaja con bloques (chunks) de datos, sintetizando la lectura y escritura de datos en un paso.
+
+
+Enfoque Tasklet
+===============
+
+Desglose del job en Items
+-------------------------
+
+Por convención se tendrían ítems como:
+
+- ItemDescompressStep (descomprimir archivo)
+- ItemReaderStep (leer archivo)
+- ItemProcessorStep (procesar archivo)
+- ItemWriterStep (guardar la data del archivo en base de datos)
+
+Cada ítem es una clase que implementa la interfaz Tasklet, por ejemplo:
+
+public class ItemReaderStep implements Tasklet {
+
+    @Autowired
+    private ResourceLoader resourceLoader;
+
+    @Override
+    public RepeatStatus execute(StepContribution stepContribution, ChunkContext chunkContext) throws Exception {
+
+        log.info("-------------------> Inicio del paso de lectura del archivo <-------------------");
+
+        // Crear un objeto CSVReaderBuilderWithSeparator y especificar el separador como coma
+        Reader reader = new FileReader(resourceLoader.getResource("classpath:files/destino/persons.csv").getFile());
+        CSVParser parser = new CSVParserBuilder()
+                .withSeparator(',')
+                .build();
+        CSVReader csvReader = new CSVReaderBuilder(reader)
+                .withCSVParser(parser)
+                .withSkipLines(1)   // Ignorar la primera línea como encabezado
+                .build();
+
+        // Leer cada línea del archivo CSV y convertirla a un objeto Persona
+        List<Person> personList = new ArrayList<>();
+        String[] linea;
+        while ((linea = csvReader.readNext()) != null) {
+            Person person = new Person();
+            person.setName(linea[0]);
+            person.setLastName(linea[1]);
+            person.setAge(Integer.parseInt(linea[2]));
+            personList.add(person);
+        }
+
+        // Cerrar el objeto CSVReader y el archivo
+        csvReader.close();
+        reader.close();
+
+        chunkContext.getStepContext()
+                    .getStepExecution()
+                    .getJobExecution()
+                    .getExecutionContext()
+                    .put("personList", personList);
+
+        log.info("-------------------> Fin del paso de lectura del archivo <-------------------");
+
+        return RepeatStatus.FINISHED;
+    }
+}
+
+Cada step sucesivo puede aprovechar la data trabajada entre todas las implementaciones de Tasklet mediante el parámetro chunkContext:
+
+        chunkContext.getStepContext()
+                    .getStepExecution()
+                    .getJobExecution()
+                    .getExecutionContext()
+                    .put("personList", personList);
+
+Configuración del proceso en Batch
+----------------------------------
+
+package com.batch.config;
+
+import com.batch.steps.ItemDescompressStep;
+import com.batch.steps.ItemProcesorStep;
+import com.batch.steps.ItemReaderStep;
+import com.batch.steps.ItemWriterStep;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.JobScope;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@EnableBatchProcessing
+public class BatchConfig {
+
+    @Autowired
+    public JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    public StepBuilderFactory stepBuilderFactory;
+	
+	// items
+
+    @Bean
+    @JobScope
+    public ItemDescompressStep itemDescompressStep(){
+        return new ItemDescompressStep();
+    }
+
+    @Bean
+    @JobScope
+    public ItemProcesorStep itemProcesorStep(){
+        return new ItemProcesorStep();
+    }
+
+    @Bean
+    @JobScope
+    public ItemReaderStep itemReaderStep(){
+        return new ItemReaderStep();
+    };
+
+    @Bean
+    @JobScope
+    public ItemWriterStep itemWriterStep(){
+        return new ItemWriterStep();
+    };
+	
+	// steps
+
+    @Bean
+    public Step descompressFileStep(){
+    return stepBuilderFactory.get("descompressFileStep")
+            .tasklet(itemDescompressStep())
+            .build();
+    }
+
+    @Bean
+    public Step readPersonStep() {
+        return stepBuilderFactory.get("readPersonStep")
+                .tasklet(itemReaderStep())
+                .build();
+    }
+
+    @Bean
+    public Step processPersonStep(){
+        return stepBuilderFactory.get("processPerson")
+                .tasklet(itemProcesorStep())
+                .build();
+    }
+
+    @Bean
+    public Step writePersonStep() {
+        return stepBuilderFactory.get("writePersonStep")
+                .tasklet(itemWriterStep())
+                .build();
+    }
+	
+	// Job
+
+    @Bean
+    public Job readCSVJob() {
+        return jobBuilderFactory.get("readCSVJob")
+                .start(descompressFileStep())
+                .next(readPersonStep())
+                .next(processPersonStep())
+                .next(writePersonStep())
+                .build();
+    }
+}
+
+Llamada desde el controlador
+----------------------------
+
+@Slf4j
+@RestController
+@RequestMapping("/v1")
+public class BatchController {
+
+    @Autowired
+    private JobLauncher jobLauncher;
+
+    @Autowired
+    private Job job;
+
+    @PostMapping("/uploadFile")
+    public ResponseEntity<?> receiveFile(@RequestParam(name = "file") MultipartFile multipartFile) {
+
+        String fileName = multipartFile.getOriginalFilename();
+        try{
+            Path path = Paths.get("src" + File.separator + "main" + File.separator + "resources" + File.separator + "files" + File.separator + fileName);
+
+            Files.createDirectories(path.getParent());
+            Files.copy(multipartFile.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
+
+            File archivo = path.toAbsolutePath().toFile();
+
+            JobParameters jobParameters = new JobParametersBuilder()
+                    .addString("nombre",fileName)
+                    .addDate("fecha", new Date())
+                    .toJobParameters();
+
+            jobLauncher.run(job, jobParameters);
+
+            Map<String, String> response = new HashMap<>();
+            response.put("archivo", fileName);
+
+            return ResponseEntity.ok(response);
+
+        }catch(Exception exception){
+            log.error("Error al iniciar el proceso batch. Error {}", exception.getMessage());
+            throw new RuntimeException();
+        }
+    }
+}
+
+Control de ejecuciones de job (desde la clase principal)
+--------------------------------------------------------
+
+Esto puede usarse en caso de ejecutar desde el programa principal en lugar del controlador:
+
+package com.batch.chunk;
+
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.batch.BatchAutoConfiguration;
+import org.springframework.context.annotation.Bean;
+
+import java.util.Date;
+
+@SpringBootApplication
+public class SpringBatchChunkApplication {
+
+	@Autowired
+	private JobLauncher jobLauncher;
+
+	@Autowired
+	private Job job;
+
+	public static void main(String[] args) {
+		SpringApplication.run(SpringBatchChunkApplication.class, args);
+	}
+
+	@Bean
+	CommandLineRunner init(){
+		return args -> {
+			JobParameters jobParameters = new JobParametersBuilder()
+					.addString("nombre", "tasklet")
+					.addLong("id", System.currentTimeMillis())
+					.addDate("fecha", new Date())
+					.toJobParameters();
+
+			jobLauncher.run(job, jobParameters);
+
+		};
+	}
+
+}
+
+
+Enfoque Chunk
+=============
+
+Cada paso debe trabajar 3 procesos:
+
+- Uno que herede la clase FlatFileItemReader<T> para leer el archivo. Ej:
+
+package com.batch.chunk.step;
+
+import com.batch.chunk.entities.Person;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.LineMapper;
+import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
+import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.core.io.ClassPathResource;
+
+import java.nio.charset.StandardCharsets;
+
+public class PersonItemReader extends FlatFileItemReader<Person> {
+
+    public PersonItemReader() {
+        setName("personReader");
+        setResource(new ClassPathResource("persons.csv"));
+        setLinesToSkip(1);
+        setLineMapper(getLineMapper());
+        setEncoding(StandardCharsets.UTF_8.name());
+    }
+
+    private LineMapper<Person> getLineMapper() {
+        DefaultLineMapper<Person> lineMapper = new DefaultLineMapper<>();
+        DelimitedLineTokenizer tokenizer = new DelimitedLineTokenizer();
+
+        String[] columnsToBeInserted = new String[]{"name", "lastName", "age"};
+        int[] fields = new int[]{0, 1, 2};
+        tokenizer.setNames(columnsToBeInserted);
+        tokenizer.setIncludedFields(fields);
+
+        BeanWrapperFieldSetMapper<Person> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
+        fieldSetMapper.setTargetType(Person.class);
+        lineMapper.setLineTokenizer(tokenizer);
+        lineMapper.setFieldSetMapper(fieldSetMapper);
+        tokenizer.setDelimiter(",");
+        return lineMapper;
+    }
+}
+
+- Uno que herede la clase ItemProcessor<T, K> para procesar el bloque. Ej:
+
+package com.batch.chunk.step;
+
+import com.batch.chunk.entities.Person;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.item.ItemProcessor;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j
+public class PersonItemProcessor implements ItemProcessor<Person, Person> {
+
+
+    @Override
+    public Person process(Person person) throws Exception {
+
+        if(person == null){
+            log.error("The item of ItemProcessor is null");
+            throw new RuntimeException();
+        }
+
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+        LocalDateTime localDateTime = LocalDateTime.now();
+
+        person.setCreateAt(dateTimeFormatter.format(localDateTime));
+
+        return person;
+    }
+}
+
+- Uno que herede la clase ItemWriter<T> para guardar el bloque. Ej:
+
+package com.batch.chunk.step;
+
+import com.batch.chunk.entities.Person;
+import com.batch.chunk.service.IPersonService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.List;
+
+@Slf4j
+public class PersonItemWriterStep implements ItemWriter<Person> {
+
+    @Autowired
+    private IPersonService personService;
+
+    @Override
+    public void write(List<? extends Person> items) {
+
+        log.info("Ingreso al writer");
+        items.forEach(person -> log.info(person.toString()));
+
+        personService.saveAll((List<Person>) items);
+    }
+}
+
+Configuración del proceso en Batch
+----------------------------------
+
+package com.batch.chunk.config;
+
+import com.batch.chunk.entities.Person;
+import com.batch.chunk.step.PersonItemProcessor;
+import com.batch.chunk.step.PersonItemReader;
+import com.batch.chunk.step.PersonItemWriterStep;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.batch.BatchAutoConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+@Configuration
+@EnableBatchProcessing
+public class BatchConfig {
+
+    @Autowired
+    private JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    private StepBuilderFactory stepBuilderFactory;
+
+    // Items del step
+	
+	@Bean
+    public PersonItemWriterStep personItemWriter(){
+        return new PersonItemWriterStep();
+    }
+
+    @Bean
+    public PersonItemReader personItemReader() {
+        return new PersonItemReader();
+    }
+
+    @Bean
+    public PersonItemProcessor personItemProcessor(){
+        return new PersonItemProcessor();
+    }
+
+	// Configuración de hilos de ejecuciones
+
+    @Bean
+    public TaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutor();
+        taskExecutor.setCorePoolSize(1);
+        taskExecutor.setMaxPoolSize(5);
+        taskExecutor.setQueueCapacity(5);
+        return taskExecutor;
+    }
+
+	// Step
+
+    @Bean
+    public Step readFile() {
+        return stepBuilderFactory.get("step1")
+                .<Person, Person>chunk(10)
+                .reader(personItemReader())
+                .processor(personItemProcessor())
+                .writer(personItemWriter())
+                .taskExecutor(taskExecutor())
+                .build();
+    }
+	
+	// Job
+
+    @Bean
+    public Job job() {
+        return jobBuilderFactory.get("job")
+                .start(readFile())
+                .build();
+    }
+}
+
+En application.properties:
+
+spring.jpa.hibernate.ddl-auto = create
+spring.batch.jdbc.initialize-schema=always
+
+spring.batch.job.enabled=true
+
+spring.sql.init.platform=mysql
+spring.sql.init.continue-on-error=false
+
+
+
+
+
+

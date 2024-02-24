@@ -1,0 +1,985 @@
+Spring Boot - Microservicios
+****************************
+
+I. Crear cada microservicio
+===========================
+
+Dependencias
+------------
+
+* Spring Web
+* DevTools
+* Cualquier esquema de base de datos (si aplica)
+* Spring Data JPA (si aplica)
+* Otras útiles como Lombok.
+
+Configuración
+-------------
+
+* Editar application.properties o crear application.yml
+
+spring.application.name=mi-microservicio
+server.port=8080 # ese es por defecto
+
+Desarrollar las capas de cada microservicio
+-------------------------------------------
+
+- controller
+- dao (o repository)
+- model
+  -- dto
+  -- entity
+- service
+- util
+
+Algunos microservicios tendrán persistencia y otros no.
+Por ejemplo, para dos microservicios Empresa y ListaEmpresa, el modelo lo define Empresa, mientras que el segundo tomará una entidad similar a Empresa, pero sin persistencia.
+
+II. Crear el servicio de reconocimiento de microservicios con Eureka Netflix
+============================================================================
+
+Dependencias
+------------
+* DevTools
+* Eureka Server
+* JAXB:
+
+```bash
+		<dependency>
+			<groupId>org.glassfish.jaxb</groupId>
+			<artifactId>jaxb-runtime</artifactId>
+		</dependency>
+```
+
+
+Configuración
+-------------
+
+* Editar application.properties o crear application.yml
+
+spring.application.name=mi-servidor-eureka
+server.port=8761 # ese es por defecto
+eureka.client.register-with-eureka=false # configurar que actúe como cliente, además de servidor, por defecto está en true
+
+En la clase principal, agregar la anotación @EnableEurekaServer:
+
+package com.formacionbdi.springboot.app.eureka;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.netflix.eureka.server.EnableEurekaServer;
+
+@EnableEurekaServer
+@SpringBootApplication
+public class SpringbootServicioEurekaServerApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(SpringbootServicioEurekaServerApplication.class, args);
+	}
+
+}
+
+Uso
+---
+
+Acceder a localhost:8761 (u otro puerto configurado). Se puede gestionar gráficamente Eureka Server.
+
+
+III. Comunicar los microservicios con Feign
+===========================================
+
+En la clase que consumirá el microservicio de otra
+--------------------------------------------------
+
+1. Agregar la siguiente dependencia:
+
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-openfeign</artifactId>
+		</dependency>
+
+Agregar también:
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+2. Crear un cliente Feign:
+
+package com.formacionbdi.springboot.app.item.clientes;
+
+import java.util.List;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+import com.formacionbdi.springboot.app.item.models.Producto;
+
+@FeignClient(name = "servicio-productos")
+public interface ProductoClienteRest {
+	
+	@GetMapping("/listar")
+	public List<Producto> listar();
+	
+	@GetMapping("/ver/{id}")
+	public Producto detalle(@PathVariable Long id);
+
+}
+
+3. Crear un servicio que trabaje con el cliente Feign:
+
+package com.formacionbdi.springboot.app.item.models.service;
+
+import java.util.List;
+
+import com.formacionbdi.springboot.app.item.models.Item;
+
+public interface ItemService {
+
+	public List<Item> findAll();
+	public Item findById(Long id, Integer cantidad);
+}
+
+package com.formacionbdi.springboot.app.item.models.service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import com.formacionbdi.springboot.app.item.clientes.ProductoClienteRest;
+import com.formacionbdi.springboot.app.item.models.Item;
+
+@Service("serviceFeign")
+public class ItemServiceFeign implements ItemService {
+	
+	@Autowired
+	private ProductoClienteRest clienteFeign;
+
+	@Override
+	public List<Item> findAll() {
+		return clienteFeign.listar().stream().map(p -> new Item(p, 1)).collect(Collectors.toList());
+	}
+
+	@Override
+	public Item findById(Long id, Integer cantidad) {
+		return new Item(clienteFeign.detalle(id), cantidad);
+	}
+
+}
+
+4. Consumir desde el controlador:
+
+
+@RestController
+public class ItemController {
+	
+	@Autowired
+	@Qualifier("serviceFeign")
+	private ItemService itemService;
+	
+	@GetMapping("/listar")
+	public List<Item> listar(){
+		return itemService.findAll();
+	}
+	
+	@GetMapping("/ver/{id}/cantidad/{cantidad}")
+	public Item detalle(@PathVariable Long id, @PathVariable Integer cantidad) {
+		return itemService.findById(id, cantidad);
+	}
+	
+}
+
+
+
+IV. Registrar cada microservicio como cliente de Eureka Server
+==============================================================
+
+Dependencias
+------------
+* Eureka Discovery Client:
+
+```bash
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+		</dependency>
+```
+
+
+Configuración
+-------------
+
+Agregar la anotación @EnableEurekaClient a cada clase principal de microservicio:
+
+package com.formacionbdi.springboot.app.productos;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.netflix.eureka.EnableEurekaClient;
+
+@EnableEurekaClient
+@SpringBootApplication
+public class SpringbootServicioProductosApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(SpringbootServicioProductosApplication.class, args);
+	}
+
+}
+
+En application.properties:
+
+eureka.client.service-url.defaultZone=http://localhost:8761/eureka
+
+Se puede una configuración de puerto e instancias automatizados:
+server.port=${PORT:0}
+eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+Verificar los servicios levantados en la dirección: http://localhost:8761
+
+V. Crear servidor Zuul Gateway
+==============================
+
+Dependencias
+------------
+* DevTools
+* Eureka Discovery Client
+* Spring Web
+* Otras como Lombok.
+
+Configuración
+-------------
+
+En application.properties:
+
+spring.application.name=zuul-server
+server.port=8090
+
+eureka.client.serviceUrl.defaultZone=http://localhost:8761/eureka/
+
+Para cada microservicio:
+
+zuul.routes.empresa.service-id=empresa
+zuul.routes.empresa.path=/api/empresa/**
+
+zuul.routes.lista-empresas.service-id=lista-empresas
+zuul.routes.lista-empresas.path=/api/lista-empresas/**
+
+
+Ejecución
+---------
+
+1. Ejecutar Eureka Server
+2. Ejecutar cada microservicio
+2. Ejecutar Zuul
+
+Filtros de Zuul
+---------------
+
+
+VI. Crear servidor Spring Cloud Gateway (alternativa a Zuul)
+============================================================
+
+Dependencias
+------------
+* DevTools
+* Eureka Discovery Client
+* Spring Cloud Gateway
+* Otras como Lombok.
+
+En pom.xml
+----------
+
+<!-- ... -->
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.2.2</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.tinexlab.ms</groupId>
+	<artifactId>spring-cloud-gateway</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>spring-cloud-gateway</name>
+	<description>Demo project for Spring Boot</description>
+	<properties>
+		<java.version>17</java.version>
+		<spring-cloud.version>2023.0.0</spring-cloud.version>
+	</properties>
+<!-- ... -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-gateway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-configuration-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+Al final, antes de cerrar el tag project:
+
+	<repositories>
+        <repository>
+            <id>netflix-candidates</id>
+            <name>Netflix Candidates</name>
+            <url>https://artifactory-oss.prod.netflix.net/artifactory/maven-oss-candidates</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+Configuración
+-------------
+
+Agregar la anotación @EnableEurekaClient como los demás microservicios.
+
+En application.properties:
+
+eureka.client.service-url.defaultZone=http://localhost:8761/eureka
+
+Se puede una configuración de puerto e instancias automatizados:
+server.port=${PORT:0}
+eureka.instance.instance-id=${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+Adicionalmente, enrutamiento:
+
+spring.cloud.gateway.routes[0].id=empresa
+spring.cloud.gateway.routes[0].uri=lb://empresa
+spring.cloud.gateway.routes[0].predicates=Path=/api/empresa/**
+spring.cloud.gateway.routes[0].filters=StripPrefix=2
+ 
+spring.cloud.gateway.routes[1].id=lista-empresas
+spring.cloud.gateway.routes[1].uri=lb://lista-empresas
+spring.cloud.gateway.routes[1].predicates=Path=/api/lista-empresas/**
+spring.cloud.gateway.routes[1].filters=StripPrefix=2
+
+El índice de "routes" refiere al microservicio a configurar.
+StripPrefix se refiere a los subniveles de cada ruta base del endpoint. En este caso, cada una tiene 2 (api con empresa y api con lista-empresas)
+lb:// significa "balanceo de carga" (load balancing).
+
+
+
+Ejecución
+---------
+
+1. Ejecutar Eureka Server
+2. Ejecutar cada microservicio
+2. Ejecutar Spring Cloud Gateway (en lugar del Zuul)
+
+
+Filtros globales por ruta (pre y post)
+--------------------------------------
+
+Se puede hacer de dos formas:
+
+- Filtro reactivo que implementa las interfaces GlobalFilter y Ordered:
+
+package com.formacionbdi.springboot.app.gateway.filters;
+
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.http.ResponseCookie;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+
+import reactor.core.publisher.Mono;
+
+@Component
+public class EjemploGlobalFilter implements GlobalFilter, Ordered{
+
+	private final Logger logger = LoggerFactory.getLogger(EjemploGlobalFilter.class);
+	
+	@Override
+	public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+		logger.info("ejecutando filtro pre");
+		exchange.getRequest().mutate().headers(h -> h.add("token", "123456"));
+		
+		return chain.filter(exchange).then(Mono.fromRunnable(() -> {
+			logger.info("ejecutando filtro post");
+			
+			Optional.ofNullable(exchange.getRequest().getHeaders().getFirst("token")).ifPresent(valor -> {
+				exchange.getResponse().getHeaders().add("token", valor);
+			});
+			
+			exchange.getResponse().getCookies().add("color", ResponseCookie.from("color", "rojo").build());
+			// exchange.getResponse().getHeaders().setContentType(MediaType.TEXT_PLAIN);
+		}));
+	}
+
+	@Override
+	public int getOrder() {
+		// TODO Auto-generated method stub
+		return 1;
+	}
+
+}
+
+
+- Filtro personalizado (hereda AbstractGatewayFilterFactory con un tipo genérico):
+
+package com.formacionbdi.springboot.app.gateway.filters.factory;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
+import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+import org.springframework.http.ResponseCookie;
+import org.springframework.stereotype.Component;
+
+import reactor.core.publisher.Mono;
+
+@Component
+public class EjemploGatewayFilterFactory extends AbstractGatewayFilterFactory<EjemploGatewayFilterFactory.Configuracion>{
+
+	private final Logger logger = LoggerFactory.getLogger(EjemploGatewayFilterFactory.class);
+	
+	
+	public EjemploGatewayFilterFactory() {
+		super(Configuracion.class);
+	}
+
+	@Override
+	public GatewayFilter apply(Configuracion config) {
+		return (exchange, chain) -> {
+	
+			logger.info("ejecutando pre gateway filter factory: " + config.mensaje);
+			return chain.filter(exchange).then(Mono.fromRunnable(() -> {
+				
+				Optional.ofNullable(config.cookieValor).ifPresent(cookie -> {
+					exchange.getResponse().addCookie(ResponseCookie.from(config.cookieNombre, cookie).build());
+				});
+				
+				logger.info("ejecutando post gateway filter factory: " + config.mensaje);
+				
+			}));
+		};
+	}
+	
+
+	@Override
+	public String name() {
+		return "EjemploCookie";
+	}
+
+	@Override
+	public List<String> shortcutFieldOrder() {
+		return Arrays.asList("mensaje", "cookieNombre", "cookieValor");
+	}
+
+	public static class Configuracion {
+
+		private String mensaje;
+		private String cookieValor;
+		private String cookieNombre;
+		public String getMensaje() {
+			return mensaje;
+		}
+		public void setMensaje(String mensaje) {
+			this.mensaje = mensaje;
+		}
+		public String getCookieValor() {
+			return cookieValor;
+		}
+		public void setCookieValor(String cookieValor) {
+			this.cookieValor = cookieValor;
+		}
+		public String getCookieNombre() {
+			return cookieNombre;
+		}
+		public void setCookieNombre(String cookieNombre) {
+			this.cookieNombre = cookieNombre;
+		}
+		
+		
+	}
+
+}
+
+
+
+Tolerancia a fallos con Resilience4J
+====================================
+
+Patrón Circuit Breaker
+----------------------
+
+Es un patrón de comportamiento que modela la comunicación entre servicios y que permite responder a eventos inesperados que bloquean dicha comunicación (como un cortocircuito). Se basa en tres estados:
+
+* Cerrado: flujo normal.
+* Abierto: el circuito pasa al estado abierto cuando se alcanza un umbral de fallas causadas por un servicio inoperativo. Después de cierto lapso, pasa a estado semiabierto
+* Semiabierto: estado temporal que evalúa si el microservicio con fallas es restaurado o mantiene su estado fallido. Si se recupera, se regresa a estado cerrado, en caso contrario vuelve a abierto.
+
+Parámetros del circuit breaker (y sus valores por defecto)
+----------------------------------------------------------
+
+Para errores:
+
+* slidingWindowSize(100): porcentaje de muestra para evaluar la cantidad de fallas a abrir el cortocircuito (100% por defecto).
+* failureRateThreshold(50): porcentaje de valores de slidingWindowSize que abre el cortocircuito (50% por defecto).
+* waitDurationInOpenState(60000 ms): tiempo de duración del estado abierto (1 minuto por defecto).
+* permittedNumberOfCallsInHalfOpenState(10): número límite de llamadas al microservicio en estado semiabierto. Si después de la duración el valor es bajo, vuelve a cerrado, en caso contrario pasa a abierto.
+
+Para lentitud:
+
+* slowCallRateThreshold(100): es el límite de llamadas que demoran en responder. Si excede de 100, entra a estado abierto.
+* slowCallDurationThreshold(60000 ms): duración máxima de una llamada lenta (1 minuto por defecto).
+
+
+Configurar el microservicio a monitorear con Reslience4J (forma 1)
+------------------------------------------------------------------
+
+
+Agregar:
+
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-bootstrap</artifactId>
+		</dependency> <!-- opcional: es para configurar con builder -->
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+		
+Para el microservicio con Spring Cloud Gateway:
+		
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+		</dependency>
+
+Modificar el controlador:
+
+@RestController
+public class ItemController {
+	
+	private final Logger logger = LoggerFactory.getLogger(ItemController.class);
+	
+	@Autowired
+	private CircuitBreakerFactory cbFactory;
+	
+	// ...
+	
+	@GetMapping("/ver/{id}/cantidad/{cantidad}")
+	public Item detalle(@PathVariable Long id, @PathVariable Integer cantidad) {
+		return cbFactory.create("items")
+				.run(()-> itemService.findById(id, cantidad), e -> metodoAlternativo(id, cantidad, e));
+	}
+	
+	public Item metodoAlternativo(Long id, Integer cantidad, Throwable e) {
+		logger.info(e.getMessage());
+		Item item = new Item();
+		Producto producto = new Producto();
+		
+		item.setCantidad(cantidad);
+		producto.setId(id);
+		producto.setNombre("Camara Sony");
+		producto.setPrecio(500.00);
+		item.setProducto(producto);
+		return item;
+	}
+
+}
+
+Configuración de parámetros desde clase de configuración:
+
+Se crea un bean a partir de la clase Customizer del paquete circuitbreaker.Customizer, modificando los parámetros. Esto es opcional, por defecto los valores son los citados en la teoría del circuit breaker.
+
+package com.formacionbdi.springboot.app.item;
+
+import java.time.Duration;
+
+import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JCircuitBreakerFactory;
+import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigBuilder;
+import org.springframework.cloud.client.circuitbreaker.Customizer;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.timelimiter.TimeLimiterConfig;
+
+@Configuration
+public class AppConfig {
+
+	// ...
+	
+	@Bean
+	public Customizer<Resilience4JCircuitBreakerFactory> defaultCustomizer(){ // <-------------------------- esta es la configuración
+		return factory -> factory.configureDefault(id -> {
+			return new Resilience4JConfigBuilder(id)
+					.circuitBreakerConfig(CircuitBreakerConfig.custom()
+							.slidingWindowSize(10)
+							.failureRateThreshold(50)
+							.waitDurationInOpenState(Duration.ofSeconds(10L))
+							.permittedNumberOfCallsInHalfOpenState(5)
+							.slowCallRateThreshold(50)
+							.slowCallDurationThreshold(Duration.ofSeconds(2L))
+							.build())
+					.timeLimiterConfig(TimeLimiterConfig.custom().timeoutDuration(Duration.ofSeconds(3L)).build())
+					.build();
+		});
+	}
+}
+
+Configurar el microservicio a monitorear con Reslience4J (forma 2)
+------------------------------------------------------------------
+
+En este caso se trabaja sobre el archivo application (properties o yml).
+
+application.yml:
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      defecto:
+        sliding-window-size: 6
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 4
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+    instances:
+      items:
+        base-config: defecto
+  timelimiter:
+    configs:
+      defecto:
+        timeout-duration: 2s
+    instances:
+      items:
+        base-config: defecto
+
+application.properties:
+
+# configuración del circuit breaker
+# fallos:
+resilience4j.circuitbreaker.configs.defecto.sliding-window-size=6
+resilience4j.circuitbreaker.configs.defecto.failure-rate-threshold=50
+resilience4j.circuitbreaker.configs.defecto.wait-duration-in-open-state=20s
+resilience4j.circuitbreaker.configs.defecto.permitted-number-of-calls-in-half-open-state=4
+resilience4j.circuitbreaker.configs.defecto.slow-call-rate-threshold=50
+resilience4j.circuitbreaker.configs.defecto.slow-call-duration-threshold=2s
+resilience4j.circuitbreaker.instances.items.base-config=defecto
+# lentitud:
+resilience4j.timelimiter.configs.defecto.timeout-duration=2s
+resilience4j.timelimiter.instances.items.base-config=defecto
+
+En Spring Cloud Gateway (application.properties):
+
+# configuración del circuit breaker
+# fallos:
+resilience4j.circuitbreaker.configs.defecto.sliding-window-size=6
+resilience4j.circuitbreaker.configs.defecto.failure-rate-threshold=50
+resilience4j.circuitbreaker.configs.defecto.wait-duration-in-open-state=20s
+resilience4j.circuitbreaker.configs.defecto.permitted-number-of-calls-in-half-open-state=4
+resilience4j.circuitbreaker.configs.defecto.slow-call-rate-threshold=50
+resilience4j.circuitbreaker.configs.defecto.slow-call-duration-threshold=2s
+resilience4j.circuitbreaker.instances.items.base-config=defecto
+# lentitud:
+resilience4j.timelimiter.configs.defecto.timeout-duration=2s
+resilience4j.timelimiter.instances.items.base-config=defecto
+
+spring.cloud.gateway.routes[0].id=empresa
+spring.cloud.gateway.routes[0].uri=lb://empresa
+spring.cloud.gateway.routes[0].predicates=Path=/api/empresa/**
+spring.cloud.gateway.routes[0].filters=StripPrefix=2
+ 
+spring.cloud.gateway.routes[1].id=lista-empresas
+spring.cloud.gateway.routes[1].uri=lb://lista-empresas
+spring.cloud.gateway.routes[1].predicates=Path=/api/lista-empresas/**
+spring.cloud.gateway.routes[1].filters=StripPrefix=2
+spring.cloud.gateway.routes[1].filters=CircuitBreaker=empresa # el nombre del servicio que hará cortocircuito
+
+
+Anotación @CircuitBreaker
+-------------------------
+
+@RestController
+public class ItemController {
+
+	// ...
+	
+	@CircuitBreaker(name="items", fallbackMethod = "metodoAlternativo")
+	@GetMapping("/ver2/{id}/cantidad/{cantidad}")
+	public Item detalle2(@PathVariable Long id, @PathVariable Integer cantidad) {
+		return itemService.findById(id, cantidad);
+	}
+	
+	// ...
+	
+	public Item metodoAlternativo(Long id, Integer cantidad, Throwable e) {
+		logger.info(e.getMessage());
+		Item item = new Item();
+		Producto producto = new Producto();
+		
+		item.setCantidad(cantidad);
+		producto.setId(id);
+		producto.setNombre("Camara Sony");
+		producto.setPrecio(500.00);
+		item.setProducto(producto);
+		return item;
+	}
+	
+	// ...
+}
+
+Anotación @TimeLimiter
+----------------------
+
+@RestController
+public class ItemController {
+	
+	// ...
+	
+	@CircuitBreaker(name="items", fallbackMethod = "metodoAlternativo")
+	@GetMapping("/ver2/{id}/cantidad/{cantidad}")
+	public Item detalle2(@PathVariable Long id, @PathVariable Integer cantidad) {
+		return itemService.findById(id, cantidad);
+	}
+	
+	@CircuitBreaker(name="items", fallbackMethod = "metodoAlternativo2")
+	@TimeLimiter(name="items")
+	@GetMapping("/ver3/{id}/cantidad/{cantidad}")
+	public CompletableFuture<Item> detalle3(@PathVariable Long id, @PathVariable Integer cantidad) {
+		return CompletableFuture.supplyAsync(()-> itemService.findById(id, cantidad));
+	}
+	
+	public Item metodoAlternativo(Long id, Integer cantidad, Throwable e) {
+		logger.info(e.getMessage());
+		Item item = new Item();
+		Producto producto = new Producto();
+		
+		item.setCantidad(cantidad);
+		producto.setId(id);
+		producto.setNombre("Camara Sony");
+		producto.setPrecio(500.00);
+		item.setProducto(producto);
+		return item;
+	}
+
+	public CompletableFuture<Item> metodoAlternativo2(Long id, Integer cantidad, Throwable e) {
+		logger.info(e.getMessage());
+		Item item = new Item();
+		Producto producto = new Producto();
+		
+		item.setCantidad(cantidad);
+		producto.setId(id);
+		producto.setNombre("Camara Sony");
+		producto.setPrecio(500.00);
+		item.setProducto(producto);
+		return CompletableFuture.supplyAsync(()-> item);
+	}
+}
+
+
+Spring Security en Spring Cloud Gateway
+=======================================
+
+Editar pom.xml en Spring Cloud Gateway
+--------------------------------------
+
+Agregar JSON:
+
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.11.2</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.11.2</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.11.2</version>
+			<scope>runtime</scope>
+		</dependency>
+
+Spring Security:
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+
+
+Client config:
+
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-config</artifactId>
+		</dependency>
+
+
+Modificar application.properties o application.yml
+--------------------------------------------------
+
+spring.cloud.gateway.routes[2].id=servicio-oauth
+spring.cloud.gateway.routes[2].uri=lb://servicio-oauth
+spring.cloud.gateway.routes[2].predicates=Path=/api/lista-security/**
+spring.cloud.gateway.routes[2].filters=StripPrefix=2
+
+spring.cloud.gateway.routes[3].id=usuarios
+spring.cloud.gateway.routes[3].uri=lb://usuarios
+spring.cloud.gateway.routes[3].predicates=Path=/api/usuarios/**
+spring.cloud.gateway.routes[3].filters=StripPrefix=2
+
+En el servicio de Spring Cloud Gateway
+--------------------------------------
+
+Crear un paquete de seguridad con las clases:
+
+SpringSecurityConfig.java:
+
+package com.formacionbdi.springboot.app.gateway.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+
+@EnableWebFluxSecurity
+public class SpringSecurityConfig {
+	
+	@Autowired
+	private JwtAuthenticationFilter authenticationFilter;
+
+	@Bean
+	public SecurityWebFilterChain configure(ServerHttpSecurity http) {
+		return http.authorizeExchange()
+				.pathMatchers("/api/security/oauth/**").permitAll()
+				.pathMatchers(HttpMethod.GET, "/api/productos/listar",
+						"/api/items/listar",
+						"/api/usuarios/usuarios",
+						"/api/items/ver/{id}/cantidad/{cantidad}",
+						"/api/productos/ver/{id}").permitAll()
+				.pathMatchers(HttpMethod.GET, "/api/usuarios/usuarios/{id}").hasAnyRole("ADMIN", "USER")
+				.pathMatchers("/api/productos/**", "/api/items/**", "/api/usuarios/usuarios/**").hasRole("ADMIN")
+				.anyExchange().authenticated()
+				.and().addFilterAt(authenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+				.csrf().disable()
+				.build();
+	}
+	
+}
+
+JwtAuthenticationFilter.java:
+
+package com.formacionbdi.springboot.app.gateway.security;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+
+import reactor.core.publisher.Mono;
+
+@Component
+public class JwtAuthenticationFilter implements WebFilter{
+
+	@Autowired
+	private ReactiveAuthenticationManager authenticationManager;
+	
+	@Override
+	public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+		return Mono.justOrEmpty(exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
+				.filter(authHeader -> authHeader.startsWith("Bearer "))
+				.switchIfEmpty(chain.filter(exchange).then(Mono.empty()))
+				.map(token -> token.replace("Bearer ", ""))
+				.flatMap(token -> authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(null, token)))
+				.flatMap(authentication -> chain.filter(exchange).contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication)));
+	}
+
+}
+
+AuthenticationManagerJwt.java:
+
+package com.formacionbdi.springboot.app.gateway.security;
+
+import java.util.Base64;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.ReactiveAuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.stereotype.Component;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import reactor.core.publisher.Mono;
+
+@Component
+public class AuthenticationManagerJwt implements ReactiveAuthenticationManager{
+
+	@Value("${config.security.oauth.jwt.key}")
+	private String llaveJwt;
+	
+	@Override
+	@SuppressWarnings("unchecked")
+	public Mono<Authentication> authenticate(Authentication authentication) {
+		return Mono.just(authentication.getCredentials().toString())
+				.map(token -> {
+					SecretKey llave = Keys.hmacShaKeyFor(Base64.getEncoder().encode(llaveJwt.getBytes()));
+					return Jwts.parserBuilder().setSigningKey(llave).build().parseClaimsJws(token).getBody();
+				})
+				.map(claims -> {
+					String username = claims.get("user_name", String.class);
+					
+					List<String> roles = claims.get("authorities", List.class);
+					Collection<GrantedAuthority> authorities = roles.stream().map(SimpleGrantedAuthority::new)
+							.collect(Collectors.toList());
+					return new UsernamePasswordAuthenticationToken(username, null, authorities);
+					
+				});
+	}
+
+}
+
+
+
+
+
+
+
+
+
